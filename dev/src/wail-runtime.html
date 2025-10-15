@@ -175,6 +175,20 @@
       text-align: left;
     }
 
+    /* Simple centering fix - let Pico CSS handle most of the layout */
+    #app-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
     /* Normalize headings and paragraph spacing */
     .step-content h1,
     .step-content h2,
@@ -291,8 +305,8 @@
       </article>
     </dialog>
 
-    <!-- AI.Web.Script -->
-    <script type="text/ai-web-script">
+    <!-- WAIL Script -->
+    <script type="wail">
 METADATA
 title: Cities Quiz
 author: J. Smith
@@ -432,9 +446,9 @@ _Coming soon:_ theme, export, and defaults.
 
     <script>
       // -------------------------------
-      // Parser for AI.Web.Script format (with AUX tags)
+      // Parser for WAIL format (with AUX tags)
       // -------------------------------
-      class AIWebScriptParser {
+      class WailParser {
         parse(scriptContent) {
           const sections = this.splitIntoSections(scriptContent);
           return {
@@ -783,9 +797,9 @@ _Coming soon:_ theme, export, and defaults.
       // -------------------------------
       function initSplashScreen() {
         // Parse the script to get welcome view content for splash
-        const scriptElement = document.querySelector('script[type="text/ai-web-script"]');
+        const scriptElement = document.querySelector('script[type="wail"]');
         if (scriptElement) {
-          const parser = new AIWebScriptParser();
+          const parser = new WailParser();
           const parsed = parser.parse(scriptElement.textContent);
 
           // Use splash tag content as splash screen
@@ -835,10 +849,10 @@ _Coming soon:_ theme, export, and defaults.
       // Init
       // -------------------------------
       async function init() {
-        const scriptElement = document.querySelector('script[type="text/ai-web-script"]');
-        if (!scriptElement) return console.error('No AI.Web.Script found');
+        const scriptElement = document.querySelector('script[type="wail"]');
+        if (!scriptElement) return console.error('No WAIL script found');
 
-        const parser = new AIWebScriptParser();
+        const parser = new WailParser();
         parsedScript = parser.parse(scriptElement.textContent);
         stepsCache = null;
 
