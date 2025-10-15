@@ -310,7 +310,7 @@ description: A simple quiz testing knowledge of cities.
 AI-GENERATED
 ai-selected-city: randomly select one city from {cities}
 ai-evaluation: evaluate {city-facts} for accuracy and completeness
-ai-grade: assign grade A-F with brief explanation
+ai-grade: assign only a single letter grade A, B, C, D, or F
 ai-funfact: generate interesting fact about {ai-selected-city}
 
 VIEWS
@@ -1109,6 +1109,8 @@ Student's facts: "${userFacts}"
 Please provide the following information:
 ${promptInstructions}
 
+IMPORTANT: For the ai-grade field, respond with ONLY a single letter: A, B, C, D, or F. Do not include any explanation or additional text.
+
 Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
 
         // Try different models in order of preference
@@ -1203,7 +1205,19 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
                 aiData[key] = JSON.stringify(value, null, 2);
               } else {
                 // Handle strings, numbers, etc.
-                aiData[key] = String(value);
+                let processedValue = String(value);
+
+                // Special processing for ai-grade: extract only the letter grade
+                if (key === 'ai-grade') {
+                  const gradeMatch = processedValue.match(/[ABCDEF]/i);
+                  if (gradeMatch) {
+                    processedValue = gradeMatch[0].toUpperCase();
+                  } else {
+                    processedValue = 'N/A';
+                  }
+                }
+
+                aiData[key] = processedValue;
               }
             });
 
@@ -1300,6 +1314,25 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         stepElement.innerHTML = html;
         restoreFormValues(stepElement);
         refreshIcons();
+
+        // Attach save button event listener if this is the output step (step 3)
+        if (stepId === 3) {
+          const saveBtn = document.getElementById('save-btn');
+          if (saveBtn) {
+            // Remove any existing event listeners to prevent duplicates
+            saveBtn.replaceWith(saveBtn.cloneNode(true));
+            const newSaveBtn = document.getElementById('save-btn');
+
+            newSaveBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              try {
+                await saveToDatabase();
+              } catch (error) {
+                console.error('Save failed:', error);
+              }
+            });
+          }
+        }
       }
 
       function renderStepMenu() {
@@ -1411,18 +1444,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         document.getElementById('aux-ok').addEventListener('click', closeAux);
         document.getElementById('aux-dialog').addEventListener('cancel', (e) => { e.preventDefault(); closeAux(); });
 
-        // Save button event listener
-        const saveBtn = document.getElementById('save-btn');
-        if (saveBtn) {
-          saveBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            try {
-              await saveToDatabase();
-            } catch (error) {
-              console.error('Save failed:', error);
-            }
-          });
-        }
+        // Save button event listener will be attached dynamically when the output view is rendered
 
         // Database dialog event listeners
         document.getElementById('db-close').addEventListener('click', closeDatabaseDialog);
