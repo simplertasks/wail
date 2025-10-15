@@ -266,11 +266,21 @@
 }
 </meta-data>
 
-AI-GENERATED
-ai-selected-city: randomly select one city from {cities}
-ai-evaluation: evaluate {city-facts} for accuracy and completeness
-ai-grade: assign only a single letter grade A, B, C, D, or F
-ai-funfact: generate interesting fact about {ai-selected-city}
+<ai-generated name="ai-selected-city">
+randomly select one city from {cities}
+</ai-generated>
+
+<ai-generated name="ai-evaluation">
+evaluate {city-facts} for accuracy and completeness
+</ai-generated>
+
+<ai-generated name="ai-grade">
+assign only a single letter grade A, B, C, D, or F
+</ai-generated>
+
+<ai-generated name="ai-funfact">
+generate interesting fact about {ai-selected-city}
+</ai-generated>
 
 VIEWS
 
@@ -551,22 +561,41 @@ _Coming soon:_ theme, export, and defaults.
             const m = fullText.match(re);
             return m ? m[1].trim() : '';
           }
-          // NEW: parse AI-GENERATED section using the same logic as data tags
+          // NEW: parse <ai-generated> tags from the full script text
           parseAIGeneratedTags(fullText) {
-            const sections = this.splitIntoSections(fullText);
-            const aiGeneratedContent = sections['AI-GENERATED'] || '';
+            const result = {};
+            const aiGeneratedRegex = /<ai-generated name="([^"]+)">([\s\S]*?)<\/ai-generated>/gi;
+            let match;
+            while ((match = aiGeneratedRegex.exec(fullText)) !== null) {
+              const name = match[1];
+              const content = match[2].trim();
 
-            if (aiGeneratedContent.trim()) {
-              return this.parseKeyValue(aiGeneratedContent);
+              console.log(`Parsing ai-generated tag: ${name}`, content);
+              result[name] = content;
+            }
+
+            // If no ai-generated tags found, try legacy AI-GENERATED section
+            if (Object.keys(result).length === 0) {
+              const sections = this.splitIntoSections(fullText);
+              const aiGeneratedContent = sections['AI-GENERATED'] || '';
+
+              if (aiGeneratedContent.trim()) {
+                return this.parseKeyValue(aiGeneratedContent);
+              }
             }
 
             // Fallback to hardcoded values if parsing fails
-            return {
-              'ai-selected-city': 'randomly select one city from {cities}',
-              'ai-evaluation': 'evaluate {city-facts} for accuracy and completeness',
-              'ai-grade': 'assign only a single letter grade A, B, C, D, or F',
-              'ai-funfact': 'generate interesting fact about {ai-selected-city}'
-            };
+            if (Object.keys(result).length === 0) {
+              return {
+                'ai-selected-city': 'randomly select one city from {cities}',
+                'ai-evaluation': 'evaluate {city-facts} for accuracy and completeness',
+                'ai-grade': 'assign only a single letter grade A, B, C, D, or F',
+                'ai-funfact': 'generate interesting fact about {ai-selected-city}'
+              };
+            }
+
+            console.log('All parsed ai-generated tags:', result);
+            return result;
           }
         }
 
