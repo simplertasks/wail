@@ -949,18 +949,28 @@ _Coming soon:_ theme, export, and defaults.
 
                 // Generate city selection for display
                 generateDisplayAIData().then(() => {
-                  // Update status message
-                  messageEl.textContent = '✓ API key is valid and connected';
                   // Update UI to enable buttons if we're on step 1
                   if (currentStep === 1) {
                     updateUI();
+                    // Focus the Next button after a short delay to ensure it's enabled
+                    setTimeout(() => {
+                      const nextBtn = document.getElementById('next-btn');
+                      if (nextBtn && !nextBtn.disabled) {
+                        nextBtn.focus();
+                      }
+                    }, 100);
                   }
                 }).catch(() => {
-                  // Update status message
-                  messageEl.textContent = '✓ API key is valid and connected';
                   // Update UI to enable buttons if we're on step 1
                   if (currentStep === 1) {
                     updateUI();
+                    // Focus the Next button after a short delay to ensure it's enabled
+                    setTimeout(() => {
+                      const nextBtn = document.getElementById('next-btn');
+                      if (nextBtn && !nextBtn.disabled) {
+                        nextBtn.focus();
+                      }
+                    }, 100);
                   }
                 });
               } else {
@@ -1011,11 +1021,9 @@ _Coming soon:_ theme, export, and defaults.
         // Only generate if we have an API key and need display data
         if (apiKey && apiKey.trim()) {
           try {
-            const validation = await validateAPIKey(apiKey);
-            if (validation.valid) {
-              // Generate only the ai-selected-city for display
-              await generateCitySelection(apiKey);
-            }
+            // Skip validation since we already know the API key is valid
+            // Generate only the ai-selected-city for display
+            await generateCitySelection(apiKey);
           } catch (error) {
             console.log('Could not generate display AI data:', error.message);
           }
@@ -1421,15 +1429,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           const t = e.target;
           if (t && t.name) {
             formData[t.name] = t.value;
-
-            // Real-time API key validation
-            if (t.name === 'groq-api-key') {
-              validateAPIKeyRealTime(t.value);
-              // Update UI to enable/disable buttons based on API key presence
-              if (currentStep === 1) {
-                updateUI();
-              }
-            }
+            // Note: API key validation is handled by the input event, not change event
           }
         });
 
