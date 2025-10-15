@@ -275,8 +275,6 @@
 }
 </ai-generated>
 
-VIEWS
-
 <view name="welcome">
 # Welcome
 <mark>
@@ -412,35 +410,19 @@ _Coming soon:_ theme, export, and defaults.
         // -------------------------------
         class WailParser {
           parse(scriptContent) {
-            const sections = this.splitIntoSections(scriptContent);
-            const legacyData = this.parseData(sections.DATA || '');
             const tagData = this.parseDataTags(scriptContent);
 
-            // Merge legacy data and tag data, with tag data taking precedence
-            const mergedData = { ...legacyData, ...tagData };
-
-            // Parse metadata from tag first, fall back to legacy format
+            // Parse metadata from tag
             const tagMetadata = this.parseMetaDataTag(scriptContent);
-            const legacyMetadata = this.parseKeyValue(sections.METADATA || '');
-            const mergedMetadata = { ...legacyMetadata, ...tagMetadata };
 
             return {
-              metadata: mergedMetadata,
+              metadata: tagMetadata,
               aiGenerated: this.parseAIGeneratedTags(scriptContent),
-              views: this.parseViews(scriptContent), // parse from the whole source, not just VIEWS section
-              data: mergedData,
-              aux: this.parseAux(scriptContent), // parse from the whole source, not just sections
-              splash: this.parseSplash(scriptContent) // parse splash tag separately
+              views: this.parseViews(scriptContent),
+              data: tagData,
+              aux: this.parseAux(scriptContent),
+              splash: this.parseSplash(scriptContent)
             };
-          }
-          splitIntoSections(content) {
-            const sections = {};
-            const sectionRegex = /^([A-Z\-]+)\s*$/gm;
-            const parts = content.split(sectionRegex).filter(s => s.trim());
-            for (let i = 0; i < parts.length; i += 2) {
-              if (parts[i] && parts[i + 1]) sections[parts[i].trim()] = parts[i + 1].trim();
-            }
-            return sections;
           }
           parseKeyValue(content) {
             const result = {};
@@ -459,23 +441,6 @@ _Coming soon:_ theme, export, and defaults.
               views[match[1]] = { name: match[1], content: match[2].trim() };
             }
             return views;
-          }
-          parseData(content) {
-            const result = {};
-            const lines = content.split('\n');
-            let currentKey = null;
-            let currentArray = [];
-            for (const line of lines) {
-              if (line.match(/^([^:]+):$/)) {
-                if (currentKey) result[currentKey] = currentArray;
-                currentKey = line.replace(':', '').trim();
-                currentArray = [];
-              } else if (line.trim().startsWith('-')) {
-                currentArray.push(line.trim().substring(1).trim());
-              }
-            }
-            if (currentKey) result[currentKey] = currentArray;
-            return result;
           }
           // NEW: parse <data> tags from the full script text
           parseDataTags(fullText) {
@@ -573,13 +538,6 @@ _Coming soon:_ theme, export, and defaults.
               return result;
             }
 
-            // If no ai-generated tags found, try legacy AI-GENERATED section
-            const sections = this.splitIntoSections(fullText);
-            const aiGeneratedContent = sections['AI-GENERATED'] || '';
-
-            if (aiGeneratedContent.trim()) {
-              return this.parseKeyValue(aiGeneratedContent);
-            }
 
             // Fallback to hardcoded values if parsing fails
             return {
