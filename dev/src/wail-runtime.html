@@ -258,10 +258,13 @@
 
       <!-- WAIL Script -->
       <script type="wail">
-METADATA
-title: Cities Quiz
-author: J. Smith
-description: A simple quiz testing knowledge of cities.
+<meta-data>
+{
+  "title": "Cities Quiz",
+  "author": "J. Smith",
+  "description": "A simple quiz testing knowledge of cities."
+}
+</meta-data>
 
 AI-GENERATED
 ai-selected-city: randomly select one city from {cities}
@@ -270,31 +273,6 @@ ai-grade: assign only a single letter grade A, B, C, D, or F
 ai-funfact: generate interesting fact about {ai-selected-city}
 
 VIEWS
-
-<splash>
-# {title}
-<mark>
-	by {author}
-</mark>
-
-{description}
-
-<form>
-  <label>Groq API Key (required)
-    <input type="password" name="groq-api-key" placeholder="Enter your Groq API key (starts with gsk_)..." />
-    <small>
-      <strong>Note:</strong> This app uses <strong>Groq API</strong> (not xAI's Grok API). 
-      Get a free key at <a href="https://console.groq.com" target="_blank">console.groq.com</a>.
-      Keys start with "gsk_" and are about 50 characters long.
-    </small>
-  </label>
-  
-  <button type="button" id="validate-api-btn" class="secondary" style="margin-top: 1rem;">
-    <i data-lucide="check-circle"></i>
-    Validate API Key
-  </button>
-</form>
-</splash>
 
 <view name="welcome">
 # Welcome
@@ -374,6 +352,31 @@ Goodbye
 ]
 </data>
 
+<splash>
+# {title}
+<mark>
+	by {author}
+</mark>
+
+{description}
+
+<form>
+  <label>Groq API Key (required)
+    <input type="password" name="groq-api-key" placeholder="Enter your Groq API key (starts with gsk_)..." />
+    <small>
+      <strong>Note:</strong> This app uses <strong>Groq API</strong> (not xAI's Grok API). 
+      Get a free key at <a href="https://console.groq.com" target="_blank">console.groq.com</a>.
+      Keys start with "gsk_" and are about 50 characters long.
+    </small>
+  </label>
+  
+  <button type="button" id="validate-api-btn" class="secondary" style="margin-top: 1rem;">
+    <i data-lucide="check-circle"></i>
+    Validate API Key
+  </button>
+</form>
+</splash>
+
 <!-- AUX TAGS (NOT counted as wizard steps) -->
 <help>
 # Help
@@ -413,10 +416,15 @@ _Coming soon:_ theme, export, and defaults.
             // Merge legacy data and tag data, with tag data taking precedence
             const mergedData = { ...legacyData, ...tagData };
 
+            // Parse metadata from tag first, fall back to legacy format
+            const tagMetadata = this.parseMetaDataTag(scriptContent);
+            const legacyMetadata = this.parseKeyValue(sections.METADATA || '');
+            const mergedMetadata = { ...legacyMetadata, ...tagMetadata };
+
             return {
-              metadata: this.parseKeyValue(sections.METADATA || ''),
-              aiGenerated: this.parseKeyValue(sections['AI-GENERATED'] || ''),
-              views: this.parseViews(sections.VIEWS || ''),
+              metadata: mergedMetadata,
+              aiGenerated: this.parseAIGeneratedTags(scriptContent),
+              views: this.parseViews(scriptContent), // parse from the whole source, not just VIEWS section
               data: mergedData,
               aux: this.parseAux(scriptContent), // parse from the whole source, not just sections
               splash: this.parseSplash(scriptContent) // parse splash tag separately
@@ -441,6 +449,7 @@ _Coming soon:_ theme, export, and defaults.
             return result;
           }
           parseViews(content) {
+            console.log('Parsing views from content:', content.substring(0, 200) + '...');
             const views = {};
             const viewRegex = /<view name="([^"]+)">([\s\S]*?)<\/view>/g;
             let match;
@@ -499,6 +508,30 @@ _Coming soon:_ theme, export, and defaults.
             console.log('All parsed data tags:', result);
             return result;
           }
+          // NEW: parse <meta-data> tag from the full script text
+          parseMetaDataTag(fullText) {
+            const metaDataRegex = /<meta-data>([\s\S]*?)<\/meta-data>/i;
+            const match = fullText.match(metaDataRegex);
+
+            if (!match) {
+              console.log('No meta-data tag found');
+              return {};
+            }
+
+            const content = match[1].trim();
+            console.log('Parsing meta-data tag:', content);
+
+            try {
+              // Try to parse as JSON
+              const parsed = JSON.parse(content);
+              console.log('Successfully parsed meta-data as JSON:', parsed);
+              return parsed;
+            } catch (error) {
+              console.log('JSON parsing failed for meta-data, falling back to key-value parsing:', error.message);
+              // If JSON parsing fails, fall back to key-value parsing
+              return this.parseKeyValue(content);
+            }
+          }
           // NEW: parse <help>, <about>, <settings> from the full script text
           parseAux(fullText) {
             const tag = (name) => {
@@ -517,6 +550,23 @@ _Coming soon:_ theme, export, and defaults.
             const re = /<splash>([\s\S]*?)<\/splash>/i;
             const m = fullText.match(re);
             return m ? m[1].trim() : '';
+          }
+          // NEW: parse AI-GENERATED section using the same logic as data tags
+          parseAIGeneratedTags(fullText) {
+            const sections = this.splitIntoSections(fullText);
+            const aiGeneratedContent = sections['AI-GENERATED'] || '';
+
+            if (aiGeneratedContent.trim()) {
+              return this.parseKeyValue(aiGeneratedContent);
+            }
+
+            // Fallback to hardcoded values if parsing fails
+            return {
+              'ai-selected-city': 'randomly select one city from {cities}',
+              'ai-evaluation': 'evaluate {city-facts} for accuracy and completeness',
+              'ai-grade': 'assign only a single letter grade A, B, C, D, or F',
+              'ai-funfact': 'generate interesting fact about {ai-selected-city}'
+            };
           }
         }
 
@@ -736,13 +786,19 @@ _Coming soon:_ theme, export, and defaults.
         }
 
         function buildSteps() {
+          console.log('Building steps, parsedScript.views:', parsedScript.views);
           const viewNames = Object.keys(parsedScript.views || {});
+          console.log('View names found:', viewNames);
+
           // All views are wizard steps since splash is now a separate tag
-          return viewNames.map((name, index) => ({
+          const steps = viewNames.map((name, index) => ({
             id: index + 1,
             name: name.charAt(0).toUpperCase() + name.slice(1),
             viewName: name
           }));
+
+          console.log('Built steps:', steps);
+          return steps;
         }
 
         function getSteps(force = false) {
@@ -909,6 +965,7 @@ _Coming soon:_ theme, export, and defaults.
 
           const parser = new WailParser();
           parsedScript = parser.parse(scriptElement.textContent);
+          console.log('AI-GENERATED section:', parsedScript.aiGenerated);
           stepsCache = null;
 
           // AI will handle city selection when needed
@@ -978,6 +1035,7 @@ _Coming soon:_ theme, export, and defaults.
         // AI generation - requires valid API key
         async function generateAIData() {
           const apiKey = formData['groq-api-key'];
+          console.log('generateAIData called with API key:', apiKey ? 'present' : 'missing');
 
           // Validate API key first
           const validation = await validateAPIKey(apiKey);
@@ -985,8 +1043,10 @@ _Coming soon:_ theme, export, and defaults.
             throw new Error(validation.error);
           }
 
+          console.log('API key validation passed, calling generateWithGroqAPI');
           // Use Groq API
           await generateWithGroqAPI(apiKey);
+          console.log('generateWithGroqAPI completed, aiData:', aiData);
         }
 
         // Generate AI data for display purposes (like city selection)
@@ -1065,9 +1125,16 @@ _Coming soon:_ theme, export, and defaults.
 
         // Groq API implementation
         async function generateWithGroqAPI(apiKey) {
+          console.log('generateWithGroqAPI called');
+          console.log('parsedScript.aiGenerated:', parsedScript.aiGenerated);
+          console.log('Current aiData:', aiData);
+
           // Get all AI variables that need to be generated (excluding those already set)
           const aiVariables = Object.keys(parsedScript.aiGenerated || {});
           const variablesToGenerate = aiVariables.filter(key => !aiData[key]);
+
+          console.log('All AI variables:', aiVariables);
+          console.log('Variables to generate:', variablesToGenerate);
 
           if (variablesToGenerate.length === 0) {
             console.log('No AI variables need generation');
@@ -1095,6 +1162,13 @@ ${promptInstructions}
 IMPORTANT: For the ai-grade field, respond with ONLY a single letter: A, B, C, D, or F. Do not include any explanation or additional text.
 
 Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
+
+          console.log('=== API CALL DEBUG ===');
+          console.log('City:', city);
+          console.log('User facts:', userFacts);
+          console.log('Prompt instructions:', promptInstructions);
+          console.log('Full prompt:', evaluationPrompt);
+          console.log('Variables to generate:', variablesToGenerate);
 
           // Try different models in order of preference
           const models = ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama-3-8b-8192'];
@@ -1165,11 +1239,24 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               const data = await response.json();
               console.log(`Groq API Success Response for ${model}:`, data);
 
+              if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+                throw new Error('Invalid response format from Groq API');
+              }
+
               const aiResponse = data.choices[0].message.content;
+              console.log('Raw AI response:', aiResponse);
 
               // Parse the JSON response (guaranteed to be valid JSON with response_format)
-              const parsed = JSON.parse(aiResponse);
-              console.log('Parsed JSON successfully:', parsed);
+              let parsed;
+              try {
+                parsed = JSON.parse(aiResponse);
+                console.log('Parsed JSON successfully:', parsed);
+              } catch (parseError) {
+                console.error('Failed to parse JSON response:', parseError);
+                console.error('Raw response was:', aiResponse);
+                throw new Error(`Failed to parse AI response as JSON: ${parseError.message}`);
+              }
+
               console.log('Variables to generate:', variablesToGenerate);
               console.log('Raw response values:', variablesToGenerate.map(key => ({ key, value: parsed[key], type: typeof parsed[key] })));
 
@@ -1205,6 +1292,8 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               });
 
               console.log('Set aiData:', aiData);
+              console.log('AI data keys:', Object.keys(aiData));
+              console.log('AI data values:', Object.values(aiData));
 
               // Success! Break out of the model loop
               return;
@@ -1242,21 +1331,37 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             }
           }
 
-          // AI-generated
+          // AI-generated variables
           console.log('aiData:', aiData);
           for (const [key, value] of Object.entries(aiData)) {
-            result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+            if (value !== undefined && value !== null) {
+              result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), String(value));
+              console.log(`Replaced {${key}} with:`, value);
+            }
           }
 
-          // Handle missing AI variables with loading placeholders
-          if (result.includes('{ai-selected-city}')) {
-            if (aiData['ai-selected-city']) {
-              result = result.replace(/\{ai-selected-city\}/g, aiData['ai-selected-city']);
-              console.log('Replaced {ai-selected-city} with:', aiData['ai-selected-city']);
-            } else {
-              result = result.replace(/\{ai-selected-city\}/g, 'a random city (selecting...)');
-              console.log('Replaced {ai-selected-city} with placeholder');
-            }
+          // Handle missing AI variables with loading placeholders or fallback values
+          const aiVariablePattern = /\{ai-[^}]+\}/g;
+          const missingAIVars = result.match(aiVariablePattern);
+          if (missingAIVars) {
+            missingAIVars.forEach(varName => {
+              const cleanVarName = varName.slice(1, -1); // Remove { and }
+              if (!aiData[cleanVarName]) {
+                // Provide fallback values for common AI variables
+                let fallbackValue = `${cleanVarName} (generating...)`;
+
+                if (cleanVarName === 'ai-evaluation') {
+                  fallbackValue = 'AI evaluation is being generated...';
+                } else if (cleanVarName === 'ai-grade') {
+                  fallbackValue = 'Grade: Generating...';
+                } else if (cleanVarName === 'ai-funfact') {
+                  fallbackValue = 'Fun fact is being generated...';
+                }
+
+                result = result.replace(new RegExp(`\\${varName}`, 'g'), fallbackValue);
+                console.log(`Replaced ${varName} with fallback: ${fallbackValue}`);
+              }
+            });
           }
 
           // Form data
@@ -1291,15 +1396,23 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           if (!step) return;
 
           const view = parsedScript.views[step.viewName];
+          console.log(`Updating step ${stepId} (${step.viewName})`);
+          console.log('Original view content:', view.content);
+          console.log('Current aiData:', aiData);
+
           const interpolated = interpolateVariables(view.content);
+          console.log('Interpolated content:', interpolated);
+
           const html = marked.parse(interpolated);
+          console.log('Final HTML:', html);
 
           stepElement.innerHTML = html;
           restoreFormValues(stepElement);
           refreshIcons();
 
-          // Attach save button event listener if this is the output step (step 3)
+          // Attach button event listeners if this is the output step (step 3)
           if (stepId === 3) {
+            // Save button
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) {
               // Remove any existing event listeners to prevent duplicates
@@ -1315,6 +1428,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
                 }
               });
             }
+
           }
         }
 
@@ -1466,12 +1580,20 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             // This ensures the API key and user facts are available
             if (stepId === 3) {
               try {
+                console.log('Starting AI generation for step 3...');
+                console.log('Current formData:', formData);
+                console.log('Current aiData:', aiData);
+
                 await generateAIData();
+
+                console.log('AI generation completed. Updated aiData:', aiData);
+
                 // After AI generation, update only the output step content
                 updateStepContent(3);
                 // Refresh icons for any new elements
                 refreshIcons();
               } catch (error) {
+                console.error('AI Generation failed:', error);
                 // Show error message to user
                 notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
                 // Stay on current step instead of proceeding
@@ -1511,6 +1633,12 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           const steps = getSteps();
           const maxSteps = steps.length;
           const currentStepData = steps[currentStep - 1];
+
+          // Defensive check - if no steps or current step data is undefined, don't update UI
+          if (!steps || steps.length === 0 || !currentStepData) {
+            console.error('No steps available or current step data is undefined:', { steps, currentStep, currentStepData });
+            return;
+          }
 
           const progressEl = document.getElementById('interactive-progress');
           progressEl.value = currentStep;
