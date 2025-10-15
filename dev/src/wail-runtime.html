@@ -8,8 +8,10 @@
 
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.yellow.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Dexie.js for database functionality -->
@@ -322,15 +324,6 @@ VIEWS
 </mark>
 
 {description}
-</splash>
-
-<view name="welcome">
-# Welcome
-<mark>
-	Hello
-</mark>
-
-![](https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Kokuritsu_Yoyogi_Ky%C5%8Dgij%C5%8D_1.jpg/330px-Kokuritsu_Yoyogi_Ky%C5%8Dgij%C5%8D_1.jpg)
 
 <form>
   <label>Groq API Key (required)
@@ -341,10 +334,23 @@ VIEWS
       Keys start with "gsk_" and are about 50 characters long.
     </small>
   </label>
-  <div id="api-key-status" style="margin-top: 1rem; padding: 0.5rem; border-radius: 4px; display: none;">
-    <small id="api-key-message"></small>
-  </div>
+  
+  <button type="button" id="validate-api-btn" class="secondary" style="margin-top: 1rem;">
+    <i data-lucide="check-circle"></i>
+    Validate API Key
+  </button>
 </form>
+</splash>
+
+<view name="welcome">
+# Welcome
+<mark>
+	Hello
+</mark>
+
+![](https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Kokuritsu_Yoyogi_Ky%C5%8Dgij%C5%8D_1.jpg/330px-Kokuritsu_Yoyogi_Ky%C5%8Dgij%C5%8D_1.jpg)
+
+Welcome to the Cities Quiz! Let's get started.
 	
 </view>
 	
@@ -533,6 +539,15 @@ _Coming soon:_ theme, export, and defaults.
       let stepsCache = null;
       let isSelectingCity = false;
 
+      // Initialize Notyf for toast notifications
+      const notyf = new Notyf({
+        duration: 4000,
+        position: {
+          x: 'right',
+          y: 'top',
+        }
+      });
+
       // -------------------------------
       // Dexie Database
       // -------------------------------
@@ -566,12 +581,12 @@ _Coming soon:_ theme, export, and defaults.
           console.log('Record saved to database with ID:', id);
 
           // Show success feedback
-          alert(`Record saved successfully! ID: ${id}`);
+          notyf.success(`Record saved successfully! ID: ${id}`);
 
           return id;
         } catch (error) {
           console.error('Failed to save to database:', error);
-          alert('Failed to save record: ' + error.message);
+          notyf.error('Failed to save record: ' + error.message);
           throw error;
         }
       }
@@ -668,7 +683,7 @@ _Coming soon:_ theme, export, and defaults.
         try {
           const record = await db.records.get(recordId);
           if (!record) {
-            alert('Record not found');
+            notyf.error('Record not found');
             return;
           }
 
@@ -716,7 +731,7 @@ _Coming soon:_ theme, export, and defaults.
 
         } catch (error) {
           console.error('Failed to retrieve record details:', error);
-          alert('Failed to retrieve record details: ' + error.message);
+          notyf.error('Failed to retrieve record details: ' + error.message);
         }
       }
 
@@ -791,7 +806,7 @@ _Coming soon:_ theme, export, and defaults.
       // Splash Screen Logic
       // -------------------------------
       function initSplashScreen() {
-        // Parse the script to get welcome view content for splash
+        // Parse the script to get splash content
         const scriptElement = document.querySelector('script[type="wail"]');
         if (scriptElement) {
           const parser = new WailParser();
@@ -823,25 +838,75 @@ _Coming soon:_ theme, export, and defaults.
             // Replace splash content with WAIL script content, wrapped in Pico CSS structure
             const splashEl = document.getElementById('splash');
             splashEl.innerHTML = `<article class="container">${html}</article>`;
+
+            // Attach event listeners to splash screen elements
+            attachSplashEventListeners();
           } else {
             // Fallback if no splash content in WAIL script
             const splashEl = document.getElementById('splash');
             splashEl.innerHTML = `<article class="container"><h1>Loading...</h1><p>Preparing your experience...</p></article>`;
           }
         }
+      }
 
-        // Splash screen handler
-        setTimeout(() => {
-          const splash = document.getElementById('splash');
-          const appWrapper = document.getElementById('app-wrapper');
+      function attachSplashEventListeners() {
+        // Track form input in splash screen
+        document.addEventListener('input', (e) => {
+          const t = e.target;
+          if (t && t.name) {
+            formData[t.name] = t.value;
+          }
+        });
 
-          splash.classList.add('fade-out');
+        // Validate API key button in splash screen
+        const validateBtn = document.getElementById('validate-api-btn');
+        if (validateBtn) {
+          validateBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await validateAPIKeyAndProceed();
+          });
+        }
+      }
 
-          setTimeout(() => {
-            splash.style.display = 'none';
-            appWrapper.classList.add('show');
-          }, 1000);
-        }, 2500);
+      async function validateAPIKeyAndProceed() {
+        const apiKey = formData['groq-api-key'];
+
+        if (!apiKey || apiKey.trim().length === 0) {
+          notyf.error('Please enter an API key first.');
+          return;
+        }
+
+        if (apiKey.trim().length < 10) {
+          notyf.error('API key is too short. Groq API keys are typically around 50 characters long.');
+          return;
+        }
+
+        try {
+          const validation = await validateAPIKey(apiKey.trim());
+          if (validation.valid) {
+            notyf.success('API key is valid! Starting the quiz...');
+
+            // Generate city selection for display
+            await generateDisplayAIData();
+
+            // Transition to main app
+            setTimeout(() => {
+              const splash = document.getElementById('splash');
+              const appWrapper = document.getElementById('app-wrapper');
+
+              splash.classList.add('fade-out');
+
+              setTimeout(() => {
+                splash.style.display = 'none';
+                appWrapper.classList.add('show');
+              }, 1000);
+            }, 1500);
+          } else {
+            notyf.error(validation.error);
+          }
+        } catch (error) {
+          notyf.error(`Validation error: ${error.message}`);
+        }
       }
 
       // -------------------------------
@@ -918,87 +983,6 @@ _Coming soon:_ theme, export, and defaults.
         }
       }
 
-      // Real-time API key validation (debounced)
-      let validationTimeout = null;
-      async function validateAPIKeyRealTime(apiKey) {
-        // Clear previous timeout
-        if (validationTimeout) {
-          clearTimeout(validationTimeout);
-        }
-
-        // Hide status initially
-        const statusEl = document.getElementById('api-key-status');
-        const messageEl = document.getElementById('api-key-message');
-        if (statusEl) statusEl.style.display = 'none';
-
-        // Debounce validation
-        validationTimeout = setTimeout(async () => {
-          if (!apiKey || apiKey.trim().length < 10) {
-            return; // Don't validate very short keys
-          }
-
-          try {
-            const validation = await validateAPIKey(apiKey);
-            if (statusEl && messageEl) {
-              statusEl.style.display = 'block';
-              if (validation.valid) {
-                statusEl.style.backgroundColor = '#d4edda';
-                statusEl.style.borderColor = '#c3e6cb';
-                statusEl.style.color = '#155724';
-                messageEl.textContent = '✓ API key is valid and connected - selecting city...';
-
-                // Generate city selection for display
-                generateDisplayAIData().then(() => {
-                  // Update UI to enable buttons if we're on step 1
-                  if (currentStep === 1) {
-                    updateUI();
-                    // Focus the Next button after a short delay to ensure it's enabled
-                    setTimeout(() => {
-                      const nextBtn = document.getElementById('next-btn');
-                      if (nextBtn && !nextBtn.disabled) {
-                        nextBtn.focus();
-                      }
-                    }, 100);
-                  }
-                }).catch(() => {
-                  // Update UI to enable buttons if we're on step 1
-                  if (currentStep === 1) {
-                    updateUI();
-                    // Focus the Next button after a short delay to ensure it's enabled
-                    setTimeout(() => {
-                      const nextBtn = document.getElementById('next-btn');
-                      if (nextBtn && !nextBtn.disabled) {
-                        nextBtn.focus();
-                      }
-                    }, 100);
-                  }
-                });
-              } else {
-                statusEl.style.backgroundColor = '#f8d7da';
-                statusEl.style.borderColor = '#f5c6cb';
-                statusEl.style.color = '#721c24';
-                messageEl.textContent = `✗ ${validation.error}`;
-                // Update UI to disable buttons if we're on step 1
-                if (currentStep === 1) {
-                  updateUI();
-                }
-              }
-            }
-          } catch (error) {
-            if (statusEl && messageEl) {
-              statusEl.style.display = 'block';
-              statusEl.style.backgroundColor = '#f8d7da';
-              statusEl.style.borderColor = '#f5c6cb';
-              statusEl.style.color = '#721c24';
-              messageEl.textContent = `✗ Validation error: ${error.message}`;
-              // Update UI to disable buttons if we're on step 1
-              if (currentStep === 1) {
-                updateUI();
-              }
-            }
-          }
-        }, 1000); // 1 second debounce
-      }
 
       // AI generation - requires valid API key
       async function generateAIData() {
@@ -1414,14 +1398,9 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           const t = e.target;
           if (t && t.name) {
             formData[t.name] = t.value;
-
-            // Real-time API key validation
-            if (t.name === 'groq-api-key') {
-              validateAPIKeyRealTime(t.value);
-              // Update UI to enable/disable buttons based on API key presence
-              if (currentStep === 1) {
-                updateUI();
-              }
+            // Update UI to enable/disable buttons based on API key presence
+            if (currentStep === 1) {
+              updateUI();
             }
           }
         });
@@ -1444,6 +1423,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         document.getElementById('aux-ok').addEventListener('click', closeAux);
         document.getElementById('aux-dialog').addEventListener('cancel', (e) => { e.preventDefault(); closeAux(); });
 
+
         // Save button event listener will be attached dynamically when the output view is rendered
 
         // Database dialog event listeners
@@ -1461,9 +1441,9 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             const success = await clearAllRecords();
             if (success) {
               await displayRecords();
-              alert('All records have been cleared from the database.');
+              notyf.success('All records have been cleared from the database.');
             } else {
-              alert('Failed to clear records from the database.');
+              notyf.error('Failed to clear records from the database.');
             }
           }
         });
@@ -1502,7 +1482,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               refreshIcons();
             } catch (error) {
               // Show error message to user
-              alert(`AI Generation Failed: ${error.message}\n\nPlease check your API key and try again.`);
+              notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
               // Stay on current step instead of proceeding
               currentStep = 2;
               return;
@@ -1571,17 +1551,14 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
 
         if (!backBtn || !nextBtn || !hamburgerBtn) return; // Exit if buttons don't exist yet
 
-        // Check if we have a valid API key
-        const hasValidAPIKey = formData['groq-api-key'] && formData['groq-api-key'].trim().length > 0;
-
         // Back button: disabled on step 1, enabled on other steps
         backBtn.disabled = currentStep === 1;
 
-        // Next button: disabled on last step, or on step 1 without valid API key, or when selecting city
-        nextBtn.disabled = currentStep === maxSteps || (currentStep === 1 && !hasValidAPIKey) || isSelectingCity;
+        // Next button: disabled on last step or when selecting city
+        nextBtn.disabled = currentStep === maxSteps || isSelectingCity;
 
-        // Hamburger menu: disabled on step 1 without valid API key, enabled otherwise
-        hamburgerBtn.disabled = currentStep === 1 && !hasValidAPIKey;
+        // Hamburger menu: always enabled (API key is validated before entering main app)
+        hamburgerBtn.disabled = false;
 
         // Update Next button text when city selection is in progress
         if (isSelectingCity && currentStep === 1) {
