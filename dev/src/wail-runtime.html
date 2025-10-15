@@ -214,7 +214,7 @@
           <h2 id="step-title"><i data-lucide="map-pin" aria-hidden="true"></i></h2>
 
           <!-- Hamburger menu button -->
-          <button id="step-menu-btn" class="secondary" style="padding: 0.5rem;">
+          <button id="step-menu-btn" class="secondary" style="padding: 0.5rem;" disabled>
             <i data-lucide="menu" aria-hidden="true"></i>
           </button>
         </div>
@@ -227,11 +227,11 @@
 
     <div class="container">
       <div class="button-group">
-        <button id="back-btn" class="secondary back-btn">
+        <button id="back-btn" class="secondary back-btn" disabled>
           <i data-lucide="arrow-left"></i>
           Back
         </button>
-        <button id="next-btn" class="next-btn">
+        <button id="next-btn" disabled>
           Next
           <i data-lucide="arrow-right"></i>
         </button>
@@ -951,20 +951,27 @@ _Coming soon:_ theme, export, and defaults.
                 generateDisplayAIData().then(() => {
                   // Update status message
                   messageEl.textContent = '✓ API key is valid and connected';
-                  // ONLY update if we're still on step 1 (the welcome view)
+                  // Update UI to enable buttons if we're on step 1
                   if (currentStep === 1) {
-                    // Don't update the UI, just update the content silently
-                    // The city will be shown when user navigates to step 2
+                    updateUI();
                   }
                 }).catch(() => {
                   // Update status message
                   messageEl.textContent = '✓ API key is valid and connected';
+                  // Update UI to enable buttons if we're on step 1
+                  if (currentStep === 1) {
+                    updateUI();
+                  }
                 });
               } else {
                 statusEl.style.backgroundColor = '#f8d7da';
                 statusEl.style.borderColor = '#f5c6cb';
                 statusEl.style.color = '#721c24';
                 messageEl.textContent = `✗ ${validation.error}`;
+                // Update UI to disable buttons if we're on step 1
+                if (currentStep === 1) {
+                  updateUI();
+                }
               }
             }
           } catch (error) {
@@ -974,6 +981,10 @@ _Coming soon:_ theme, export, and defaults.
               statusEl.style.borderColor = '#f5c6cb';
               statusEl.style.color = '#721c24';
               messageEl.textContent = `✗ Validation error: ${error.message}`;
+              // Update UI to disable buttons if we're on step 1
+              if (currentStep === 1) {
+                updateUI();
+              }
             }
           }
         }, 1000); // 1 second debounce
@@ -1235,6 +1246,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         }
 
         // AI-generated
+        console.log('aiData:', aiData);
         for (const [key, value] of Object.entries(aiData)) {
           result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
         }
@@ -1243,8 +1255,10 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         if (result.includes('{ai-selected-city}')) {
           if (aiData['ai-selected-city']) {
             result = result.replace(/\{ai-selected-city\}/g, aiData['ai-selected-city']);
+            console.log('Replaced {ai-selected-city} with:', aiData['ai-selected-city']);
           } else {
             result = result.replace(/\{ai-selected-city\}/g, 'a random city (selecting...)');
+            console.log('Replaced {ai-selected-city} with placeholder');
           }
         }
 
@@ -1311,7 +1325,13 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
       // -------------------------------
       // Events
       // -------------------------------
+      let eventListenersAttached = false;
+
       function attachEventListeners() {
+        // Prevent duplicate event listeners
+        if (eventListenersAttached) return;
+        eventListenersAttached = true;
+
         // Step control buttons
         document.getElementById('back-btn').addEventListener('click', previousStep);
         document.getElementById('next-btn').addEventListener('click', nextStep);
@@ -1357,6 +1377,10 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             // Real-time API key validation
             if (t.name === 'groq-api-key') {
               validateAPIKeyRealTime(t.value);
+              // Update UI to enable/disable buttons based on API key presence
+              if (currentStep === 1) {
+                updateUI();
+              }
             }
           }
         });
@@ -1368,6 +1392,10 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             // Real-time API key validation
             if (t.name === 'groq-api-key') {
               validateAPIKeyRealTime(t.value);
+              // Update UI to enable/disable buttons based on API key presence
+              if (currentStep === 1) {
+                updateUI();
+              }
             }
           }
         });
@@ -1448,8 +1476,8 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               await generateAIData();
               // After AI generation, update only the output step content
               updateStepContent(3);
-              // Re-attach event listeners for the save button
-              attachEventListeners();
+              // Refresh icons for any new elements
+              refreshIcons();
             } catch (error) {
               // Show error message to user
               alert(`AI Generation Failed: ${error.message}\n\nPlease check your API key and try again.`);
@@ -1514,10 +1542,24 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           a.toggleAttribute('aria-current', stepId === currentStep);
         });
 
-        // Buttons
-        document.getElementById('back-btn').disabled = currentStep === 1;
+        // Simple button state management
+        const backBtn = document.getElementById('back-btn');
         const nextBtn = document.getElementById('next-btn');
-        nextBtn.disabled = currentStep === maxSteps || isSelectingCity;
+        const hamburgerBtn = document.getElementById('step-menu-btn');
+
+        if (!backBtn || !nextBtn || !hamburgerBtn) return; // Exit if buttons don't exist yet
+
+        // Check if we have a valid API key
+        const hasValidAPIKey = formData['groq-api-key'] && formData['groq-api-key'].trim().length > 0;
+
+        // Back button: disabled on step 1, enabled on other steps
+        backBtn.disabled = currentStep === 1;
+
+        // Next button: disabled on last step, or on step 1 without valid API key, or when selecting city
+        nextBtn.disabled = currentStep === maxSteps || (currentStep === 1 && !hasValidAPIKey) || isSelectingCity;
+
+        // Hamburger menu: disabled on step 1 without valid API key, enabled otherwise
+        hamburgerBtn.disabled = currentStep === 1 && !hasValidAPIKey;
 
         // Update Next button text when city selection is in progress
         if (isSelectingCity && currentStep === 1) {
