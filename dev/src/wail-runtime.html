@@ -112,14 +112,10 @@
 
     .step-content {
       display: none;
-      min-height: 40vh;
-      padding: 2rem 0;
     }
 
     .step-content.active {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
+      display: block;
     }
 
     i[data-lucide] {
@@ -155,44 +151,6 @@
 
     #step-menu li a[aria-current="step"] {
       font-weight: 600;
-    }
-
-    /* Optional: keep layout steady when swapping steps */
-    #main-content {
-      min-height: 50vh;
-    }
-
-
-    /* Ensure proper centering on initial load */
-    .step-content {
-      text-align: center;
-    }
-
-    .step-content>* {
-      text-align: left;
-    }
-
-    /* Simple centering fix - let Pico CSS handle most of the layout */
-    #app-wrapper {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    #main-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    /* Normalize headings and paragraph spacing */
-    .step-content h1,
-    .step-content h2,
-    .step-content h3,
-    .step-content p {
-      margin-top: 0.5rem;
-      margin-bottom: 0.75rem;
     }
   </style>
 </head>
