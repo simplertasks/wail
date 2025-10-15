@@ -266,20 +266,13 @@
 }
 </meta-data>
 
-<ai-generated name="ai-selected-city">
-randomly select one city from {cities}
-</ai-generated>
-
-<ai-generated name="ai-evaluation">
-evaluate {city-facts} for accuracy and completeness
-</ai-generated>
-
-<ai-generated name="ai-grade">
-assign only a single letter grade A, B, C, D, or F
-</ai-generated>
-
-<ai-generated name="ai-funfact">
-generate interesting fact about {ai-selected-city}
+<ai-generated>
+{
+  "ai-selected-city": "randomly select one city from {cities}",
+  "ai-evaluation": "evaluate {city-facts} for accuracy and completeness",
+  "ai-grade": "assign only a single letter grade A, B, C, D, or F",
+  "ai-funfact": "generate interesting fact about {ai-selected-city}"
+}
 </ai-generated>
 
 VIEWS
@@ -549,37 +542,52 @@ _Coming soon:_ theme, export, and defaults.
           }
           // NEW: parse <ai-generated> tags from the full script text
           parseAIGeneratedTags(fullText) {
-            const result = {};
-            const aiGeneratedRegex = /<ai-generated name="([^"]+)">([\s\S]*?)<\/ai-generated>/gi;
-            let match;
-            while ((match = aiGeneratedRegex.exec(fullText)) !== null) {
-              const name = match[1];
-              const content = match[2].trim();
+            // First try to parse as JSON format (new format)
+            const aiGeneratedRegex = /<ai-generated>([\s\S]*?)<\/ai-generated>/i;
+            const match = fullText.match(aiGeneratedRegex);
 
-              result[name] = content;
-            }
-
-            // If no ai-generated tags found, try legacy AI-GENERATED section
-            if (Object.keys(result).length === 0) {
-              const sections = this.splitIntoSections(fullText);
-              const aiGeneratedContent = sections['AI-GENERATED'] || '';
-
-              if (aiGeneratedContent.trim()) {
-                return this.parseKeyValue(aiGeneratedContent);
+            if (match) {
+              const content = match[1].trim();
+              try {
+                // Try to parse as JSON
+                const parsed = JSON.parse(content);
+                return parsed;
+              } catch (error) {
+                // If JSON parsing fails, fall back to key-value parsing
+                return this.parseKeyValue(content);
               }
             }
 
-            // Fallback to hardcoded values if parsing fails
-            if (Object.keys(result).length === 0) {
-              return {
-                'ai-selected-city': 'randomly select one city from {cities}',
-                'ai-evaluation': 'evaluate {city-facts} for accuracy and completeness',
-                'ai-grade': 'assign only a single letter grade A, B, C, D, or F',
-                'ai-funfact': 'generate interesting fact about {ai-selected-city}'
-              };
+            // If no JSON format found, try legacy individual tags format
+            const result = {};
+            const legacyAiGeneratedRegex = /<ai-generated name="([^"]+)">([\s\S]*?)<\/ai-generated>/gi;
+            let legacyMatch;
+            while ((legacyMatch = legacyAiGeneratedRegex.exec(fullText)) !== null) {
+              const name = legacyMatch[1];
+              const content = legacyMatch[2].trim();
+              result[name] = content;
             }
 
-            return result;
+            // If legacy tags found, return them
+            if (Object.keys(result).length > 0) {
+              return result;
+            }
+
+            // If no ai-generated tags found, try legacy AI-GENERATED section
+            const sections = this.splitIntoSections(fullText);
+            const aiGeneratedContent = sections['AI-GENERATED'] || '';
+
+            if (aiGeneratedContent.trim()) {
+              return this.parseKeyValue(aiGeneratedContent);
+            }
+
+            // Fallback to hardcoded values if parsing fails
+            return {
+              'ai-selected-city': 'randomly select one city from {cities}',
+              'ai-evaluation': 'evaluate {city-facts} for accuracy and completeness',
+              'ai-grade': 'assign only a single letter grade A, B, C, D, or F',
+              'ai-funfact': 'generate interesting fact about {ai-selected-city}'
+            };
           }
         }
 
