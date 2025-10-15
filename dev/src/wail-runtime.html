@@ -359,19 +359,20 @@ By the way, the other cities were:
 Goodbye
 </view>
 
-DATA
-cities:
-
-- London, England
-- New York City, USA
-- Toronto, Canada
-- Washington, D.C., USA
-- Ottawa, Canada
-- Paris, France
-- Tokyo, Japan
-- Sydney, Australia
-- Berlin, Germany
-- Rome, Italy
+<data name="cities">
+[
+  "London, England",
+  "New York City, USA",
+  "Toronto, Canada",
+  "Washington, D.C., USA",
+  "Ottawa, Canada",
+  "Paris, France",
+  "Tokyo, Japan",
+  "Sydney, Australia",
+  "Berlin, Germany",
+  "Rome, Italy"
+]
+</data>
 
 <!-- AUX TAGS (NOT counted as wizard steps) -->
 <help>
@@ -406,11 +407,17 @@ _Coming soon:_ theme, export, and defaults.
         class WailParser {
           parse(scriptContent) {
             const sections = this.splitIntoSections(scriptContent);
+            const legacyData = this.parseData(sections.DATA || '');
+            const tagData = this.parseDataTags(scriptContent);
+
+            // Merge legacy data and tag data, with tag data taking precedence
+            const mergedData = { ...legacyData, ...tagData };
+
             return {
               metadata: this.parseKeyValue(sections.METADATA || ''),
               aiGenerated: this.parseKeyValue(sections['AI-GENERATED'] || ''),
               views: this.parseViews(sections.VIEWS || ''),
-              data: this.parseData(sections.DATA || ''),
+              data: mergedData,
               aux: this.parseAux(scriptContent), // parse from the whole source, not just sections
               splash: this.parseSplash(scriptContent) // parse splash tag separately
             };
@@ -460,6 +467,36 @@ _Coming soon:_ theme, export, and defaults.
               }
             }
             if (currentKey) result[currentKey] = currentArray;
+            return result;
+          }
+          // NEW: parse <data> tags from the full script text
+          parseDataTags(fullText) {
+            const result = {};
+            const dataRegex = /<data name="([^"]+)">([\s\S]*?)<\/data>/gi;
+            let match;
+            while ((match = dataRegex.exec(fullText)) !== null) {
+              const name = match[1];
+              const content = match[2].trim();
+
+              console.log(`Parsing data tag: ${name}`, content);
+
+              try {
+                // Try to parse as JSON
+                const parsed = JSON.parse(content);
+                result[name] = parsed;
+                console.log(`Successfully parsed ${name} as JSON:`, parsed);
+              } catch (error) {
+                console.log(`JSON parsing failed for ${name}, falling back to line parsing:`, error.message);
+                // If JSON parsing fails, fall back to treating as array of lines
+                const lines = content.split('\n')
+                  .map(line => line.trim())
+                  .filter(line => line.length > 0)
+                  .map(line => line.replace(/^["']|["']$/g, '')); // Remove quotes if present
+                result[name] = lines;
+                console.log(`Parsed ${name} as lines:`, lines);
+              }
+            }
+            console.log('All parsed data tags:', result);
             return result;
           }
           // NEW: parse <help>, <about>, <settings> from the full script text
