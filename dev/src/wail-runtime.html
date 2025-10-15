@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WAIL: Web AI Markup Language Example </title>
+
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.yellow.min.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Dexie.js for database functionality -->
+  <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+  <style>
+    /* Splash Screen Styles */
+    #splash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      background-color: var(--pico-background-color);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 1s ease-out;
+    }
+
+    #splash article {
+      text-align: center;
+    }
+
+    #splash.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #splash h1,
+    #splash h2,
+    #splash h3 {
+      animation: fadeIn 1s ease-in forwards;
+      margin-bottom: 1rem;
+      opacity: 0;
+    }
+
+    #splash p,
+    #splash mark,
+    #splash form {
+      animation: fadeIn 1s ease-in 0.3s forwards;
+      opacity: 0;
+      margin: 0 auto;
+    }
+
+    #splash img {
+      animation: fadeIn 1s ease-in 0.6s forwards;
+      opacity: 0;
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+
+    #app-wrapper {
+      opacity: 0;
+      transition: opacity 1s ease-in;
+    }
+
+    #app-wrapper.show {
+      opacity: 1;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-header h2 {
+      margin: 0;
+      font-size: 1rem;
+      display: inline-flex;
+      gap: .5rem;
+      align-items: center;
+    }
+
+    .button-group {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+    }
+
+    .button-group button {
+      width: auto;
+      min-width: 120px;
+    }
+
+    .step-content {
+      display: none;
+      min-height: 40vh;
+      padding: 2rem 0;
+    }
+
+    .step-content.active {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    i[data-lucide] {
+      width: 18px;
+      height: 18px;
+      vertical-align: middle;
+    }
+
+    .button-group button i[data-lucide]:first-child {
+      margin-right: .25rem;
+    }
+
+    .button-group button i[data-lucide]:last-child {
+      margin-left: .25rem;
+    }
+
+    /* Override Pico's horizontal nav to make it vertical */
+    #step-menu {
+      display: block !important;
+      flex-direction: column !important;
+    }
+
+    #step-menu li {
+      display: block !important;
+      margin: 0 !important;
+    }
+
+    #step-menu li a {
+      display: block !important;
+      padding: 0.5rem 0 !important;
+      text-decoration: none !important;
+    }
+
+    #step-menu li a[aria-current="step"] {
+      font-weight: 600;
+    }
+
+    /* Optional: keep layout steady when swapping steps */
+    #main-content {
+      min-height: 50vh;
+    }
+
+    .step-content>* {
+      margin-left: auto;
+      margin-right: auto;
+      max-width: 600px;
+    }
+
+    /* Ensure proper centering on initial load */
+    .step-content {
+      text-align: center;
+    }
+
+    .step-content>* {
+      text-align: left;
+    }
+
+    /* Normalize headings and paragraph spacing */
+    .step-content h1,
+    .step-content h2,
+    .step-content h3,
+    .step-content p {
+      margin-top: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Splash Screen -->
+  <div id="splash">
+    <article class="container">
+      <hgroup>
+        <h1> AI markup language example </h1>
+        <p>Loading your interactive experience...</p>
+      </hgroup>
+    </article>
+  </div>
+
+  <!-- Main Application Wrapper -->
+  <div id="app-wrapper">
+    <div class="progress-indicator">
+      <div class="container">
+        <div class="progress-header">
+          <h2 id="step-title"><i data-lucide="map-pin" aria-hidden="true"></i></h2>
+
+          <!-- Hamburger menu button -->
+          <button id="step-menu-btn" class="secondary" style="padding: 0.5rem;">
+            <i data-lucide="menu" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <progress id="interactive-progress" value="1" max="1" aria-valuetext=""></progress>
+      </div>
+    </div>
+
+    <main class="container" id="main-content"></main>
+
+    <div class="container">
+      <div class="button-group">
+        <button id="back-btn" class="secondary back-btn">
+          <i data-lucide="arrow-left"></i>
+          Back
+        </button>
+        <button id="next-btn" class="next-btn">
+          Next
+          <i data-lucide="arrow-right"></i>
+        </button>
+      </div>
+    </div>
+
+
+    <!-- Aux content dialog (renders Help/About/Settings from aux tags) -->
+    <dialog id="aux-dialog">
+      <article>
+        <header>
+          <strong id="aux-title"></strong>
+          <button id="aux-close" aria-label="Close" class="close"></button>
+        </header>
+        <div id="aux-content"></div>
+        <footer>
+          <button id="aux-ok" class="secondary">Close</button>
+        </footer>
+      </article>
+    </dialog>
+
+    <!-- Step Navigation Dialog -->
+    <dialog id="step-menu-dialog">
+      <article>
+        <header>
+          <strong>Navigation</strong>
+          <button id="step-menu-close" aria-label="Close" class="close"></button>
+        </header>
+        <div id="step-menu-content">
+          <nav>
+            <ul id="step-menu"></ul>
+          </nav>
+        </div>
+        <footer>
+          <button id="step-menu-ok" class="secondary">Close</button>
+        </footer>
+      </article>
+    </dialog>
+
+    <!-- Database Inspector Dialog (Developer Tool) -->
+    <dialog id="database-dialog">
+      <article>
+        <header>
+          <strong>Database Inspector</strong>
+          <small style="color: #666; font-weight: normal;">Developer Tool</small>
+          <button id="db-close" aria-label="Close" class="close"></button>
+        </header>
+        <div id="db-content">
+          <div id="db-controls" style="margin-bottom: 1rem;">
+            <button id="refresh-db" class="secondary">
+              <i data-lucide="refresh-cw"></i>
+              Refresh
+            </button>
+            <button id="clear-db" class="secondary" style="margin-left: 0.5rem;">
+              <i data-lucide="trash-2"></i>
+              Clear All
+            </button>
+          </div>
+          <div id="db-records">
+            <p>Loading records...</p>
+          </div>
+        </div>
+        <footer>
+          <button id="db-ok" class="secondary">Close</button>
+        </footer>
+      </article>
+    </dialog>
+
+    <!-- AI.Web.Script -->
+    <script type="text/ai-web-script">
+METADATA
+title: Cities Quiz
+author: J. Smith
+description: A simple quiz testing knowledge of cities.
+
+AI-GENERATED
+ai-selected-city: randomly select one city from {cities}
+ai-evaluation: evaluate {city-facts} for accuracy and completeness
+ai-grade: assign grade A-F with brief explanation
+ai-funfact: generate interesting fact about {ai-selected-city}
+
+VIEWS
+
+<splash>
+# {title}
+<mark>
+	by {author}
+</mark>
+
+{description}
+</splash>
+
+<view name="welcome">
+# Welcome
+<mark>
+	Hello
+</mark>
+
+![](https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Kokuritsu_Yoyogi_Ky%C5%8Dgij%C5%8D_1.jpg/330px-Kokuritsu_Yoyogi_Ky%C5%8Dgij%C5%8D_1.jpg)
+
+<form>
+  <label>Groq API Key (required)
+    <input type="password" name="groq-api-key" placeholder="Enter your Groq API key (starts with gsk_)..." />
+    <small>
+      <strong>Note:</strong> This app uses <strong>Groq API</strong> (not xAI's Grok API). 
+      Get a free key at <a href="https://console.groq.com" target="_blank">console.groq.com</a>.
+      Keys start with "gsk_" and are about 50 characters long.
+    </small>
+  </label>
+  <div id="api-key-status" style="margin-top: 1rem; padding: 0.5rem; border-radius: 4px; display: none;">
+    <small id="api-key-message"></small>
+  </div>
+</form>
+	
+</view>
+	
+<view name="input">
+
+# Welcome to {title} by {author}
+
+{description}
+
+<form>
+  <label>Please enter your name
+    <input type="text" name="user-name" placeholder="Your name" />
+  </label>
+
+<label>What are three facts about {ai-selected-city}?
+<textarea name="city-facts" rows="4" placeholder="Enter three facts..."></textarea>
+</label>
+
+</form>
+</view>
+
+<view name="output">
+**Hello {user-name}!**
+
+You were asked about **{ai-selected-city}** and you replied:
+
+*{city-facts}*
+
+## AI Evaluation
+
+{ai-evaluation}
+
+**Grade: {ai-grade}**
+
+## Fun Fact
+
+*{ai-funfact}*
+
+<button id="save-btn" class="secondary" style="margin-top: 1rem;">
+  <i data-lucide="save"></i>
+  Save Results
+</button>
+</view>
+
+<view name="goodbye">
+## Thanks for playing {title}!
+
+By the way, the other cities were:
+
+{cities}
+
+Goodbye
+</view>
+
+DATA
+cities:
+
+- London, England
+- New York City, USA
+- Toronto, Canada
+- Washington, D.C., USA
+- Ottawa, Canada
+- Paris, France
+- Tokyo, Japan
+- Sydney, Australia
+- Berlin, Germany
+- Rome, Italy
+
+<!-- AUX TAGS (NOT counted as wizard steps) -->
+<help>
+# Help
+
+- Use **Next** and **Back** to move between steps.
+- Your inputs are saved as you type.
+- Use the **Steps** dropdown to jump directly.
+_Current: step {currentStep} of {totalSteps}._
+</help>
+
+<about>
+# About
+
+**AI.Web.Script Wizard** — a tiny, markdown-driven wizard demo.
+</about>
+
+<settings>
+# Settings
+
+_Coming soon:_ theme, export, and defaults.
+</settings>
+
+
+
+  </script>
+
+    <script>
+      // -------------------------------
+      // Parser for AI.Web.Script format (with AUX tags)
+      // -------------------------------
+      class AIWebScriptParser {
+        parse(scriptContent) {
+          const sections = this.splitIntoSections(scriptContent);
+          return {
+            metadata: this.parseKeyValue(sections.METADATA || ''),
+            aiGenerated: this.parseKeyValue(sections['AI-GENERATED'] || ''),
+            views: this.parseViews(sections.VIEWS || ''),
+            data: this.parseData(sections.DATA || ''),
+            aux: this.parseAux(scriptContent), // parse from the whole source, not just sections
+            splash: this.parseSplash(scriptContent) // parse splash tag separately
+          };
+        }
+        splitIntoSections(content) {
+          const sections = {};
+          const sectionRegex = /^([A-Z\-]+)\s*$/gm;
+          const parts = content.split(sectionRegex).filter(s => s.trim());
+          for (let i = 0; i < parts.length; i += 2) {
+            if (parts[i] && parts[i + 1]) sections[parts[i].trim()] = parts[i + 1].trim();
+          }
+          return sections;
+        }
+        parseKeyValue(content) {
+          const result = {};
+          const lines = content.split('\n');
+          for (const line of lines) {
+            const match = line.match(/^([^:]+):\s*(.+)$/);
+            if (match) result[match[1].trim()] = match[2].trim();
+          }
+          return result;
+        }
+        parseViews(content) {
+          const views = {};
+          const viewRegex = /<view name="([^"]+)">([\s\S]*?)<\/view>/g;
+          let match;
+          while ((match = viewRegex.exec(content)) !== null) {
+            console.log(`Parsed view: ${match[1]}`);
+            console.log(`View content: ${match[2].trim()}`);
+            views[match[1]] = { name: match[1], content: match[2].trim() };
+          }
+          console.log('All parsed views:', views);
+          return views;
+        }
+        parseData(content) {
+          const result = {};
+          const lines = content.split('\n');
+          let currentKey = null;
+          let currentArray = [];
+          for (const line of lines) {
+            if (line.match(/^([^:]+):$/)) {
+              if (currentKey) result[currentKey] = currentArray;
+              currentKey = line.replace(':', '').trim();
+              currentArray = [];
+            } else if (line.trim().startsWith('-')) {
+              currentArray.push(line.trim().substring(1).trim());
+            }
+          }
+          if (currentKey) result[currentKey] = currentArray;
+          return result;
+        }
+        // NEW: parse <help>, <about>, <settings> from the full script text
+        parseAux(fullText) {
+          const tag = (name) => {
+            const re = new RegExp(`<${name}>([\\s\\S]*?)<\\/${name}>`, 'i');
+            const m = fullText.match(re);
+            return m ? m[1].trim() : '';
+          };
+          return {
+            help: tag('help'),
+            about: tag('about'),
+            settings: tag('settings')
+          };
+        }
+        // NEW: parse <splash> tag separately from views
+        parseSplash(fullText) {
+          const re = /<splash>([\s\S]*?)<\/splash>/i;
+          const m = fullText.match(re);
+          return m ? m[1].trim() : '';
+        }
+      }
+
+      // -------------------------------
+      // Application state
+      // -------------------------------
+      let parsedScript = null;
+      let currentStep = 1;
+      let formData = {};
+      let aiData = {};
+      let stepsCache = null;
+      let isSelectingCity = false;
+
+      // -------------------------------
+      // Dexie Database
+      // -------------------------------
+      const db = new Dexie('AIWebScriptDB');
+      db.version(1).stores({
+        records: '++id, created, updated, user, data'
+      });
+
+      // Initialize database
+      db.open().catch(err => {
+        console.error('Failed to open database:', err);
+      });
+
+      // Save function to store the entire adjacent object to Dexie
+      async function saveToDatabase() {
+        try {
+          const now = new Date().toISOString();
+          const record = {
+            created: now,
+            updated: now,
+            user: 'current-user', // Placeholder for future user system
+            data: {
+              formData: { ...formData },
+              aiData: { ...aiData },
+              currentStep: currentStep,
+              timestamp: now
+            }
+          };
+
+          const id = await db.records.add(record);
+          console.log('Record saved to database with ID:', id);
+
+          // Show success feedback
+          alert(`Record saved successfully! ID: ${id}`);
+
+          return id;
+        } catch (error) {
+          console.error('Failed to save to database:', error);
+          alert('Failed to save record: ' + error.message);
+          throw error;
+        }
+      }
+
+      // Function to retrieve all records from the database
+      async function getAllRecords() {
+        try {
+          const records = await db.records.orderBy('created').reverse().toArray();
+          return records;
+        } catch (error) {
+          console.error('Failed to retrieve records:', error);
+          return [];
+        }
+      }
+
+      // Function to clear all records from the database
+      async function clearAllRecords() {
+        try {
+          await db.records.clear();
+          console.log('All records cleared from database');
+          return true;
+        } catch (error) {
+          console.error('Failed to clear records:', error);
+          return false;
+        }
+      }
+
+      // Function to display records in the database dialog
+      async function displayRecords() {
+        const recordsContainer = document.getElementById('db-records');
+        const records = await getAllRecords();
+
+        if (records.length === 0) {
+          recordsContainer.innerHTML = '<p><em>No records found in the database.</em></p>';
+          return;
+        }
+
+        let html = `
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Created</th>
+                  <th>Updated</th>
+                  <th>User</th>
+                  <th>User Name</th>
+                  <th>City</th>
+                  <th>Grade</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        records.forEach(record => {
+          const createdDate = new Date(record.created).toLocaleString();
+          const updatedDate = new Date(record.updated).toLocaleString();
+          const userName = record.data?.formData?.['user-name'] || 'N/A';
+          const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
+          const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
+
+          html += `
+            <tr>
+              <td>${record.id}</td>
+              <td>${createdDate}</td>
+              <td>${updatedDate}</td>
+              <td>${record.user}</td>
+              <td>${userName}</td>
+              <td>${city}</td>
+              <td>${grade}</td>
+              <td>
+                <button class="secondary" onclick="viewRecordDetails(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                  <i data-lucide="eye"></i>
+                  View
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+
+        html += `
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        recordsContainer.innerHTML = html;
+        refreshIcons();
+      }
+
+      // Function to view detailed record information
+      async function viewRecordDetails(recordId) {
+        try {
+          const record = await db.records.get(recordId);
+          if (!record) {
+            alert('Record not found');
+            return;
+          }
+
+          // Create a new dialog for record details
+          const detailsDialog = document.createElement('dialog');
+          detailsDialog.innerHTML = `
+            <article>
+              <header>
+                <strong>Record Details - ID: ${record.id}</strong>
+                <button id="details-close" aria-label="Close" class="close"></button>
+              </header>
+              <div>
+                <p><strong>Created:</strong> ${new Date(record.created).toLocaleString()}</p>
+                <p><strong>Updated:</strong> ${new Date(record.updated).toLocaleString()}</p>
+                <p><strong>User:</strong> ${record.user}</p>
+                
+                <h4>Complete Record Data (JSON):</h4>
+                <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 400px; overflow-y: auto;">${JSON.stringify(record, null, 2)}</pre>
+              </div>
+              <footer>
+                <button id="details-ok" class="secondary">Close</button>
+              </footer>
+            </article>
+          `;
+
+          document.body.appendChild(detailsDialog);
+          detailsDialog.showModal();
+
+          // Add event listeners for the details dialog
+          detailsDialog.querySelector('#details-close').addEventListener('click', () => {
+            detailsDialog.close();
+            document.body.removeChild(detailsDialog);
+          });
+
+          detailsDialog.querySelector('#details-ok').addEventListener('click', () => {
+            detailsDialog.close();
+            document.body.removeChild(detailsDialog);
+          });
+
+          detailsDialog.addEventListener('cancel', (e) => {
+            e.preventDefault();
+            detailsDialog.close();
+            document.body.removeChild(detailsDialog);
+          });
+
+        } catch (error) {
+          console.error('Failed to retrieve record details:', error);
+          alert('Failed to retrieve record details: ' + error.message);
+        }
+      }
+
+      // -------------------------------
+      // Helpers
+      // -------------------------------
+      function refreshIcons() {
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+          lucide.createIcons();
+        }
+      }
+
+      function buildSteps() {
+        const viewNames = Object.keys(parsedScript.views || {});
+        // All views are wizard steps since splash is now a separate tag
+        return viewNames.map((name, index) => ({
+          id: index + 1,
+          name: name.charAt(0).toUpperCase() + name.slice(1),
+          viewName: name
+        }));
+      }
+
+      function getSteps(force = false) {
+        if (force || !stepsCache) stepsCache = buildSteps();
+        return stepsCache;
+      }
+
+      function restoreFormValues(root = document) {
+        const fields = root.querySelectorAll('input[name], textarea[name], select[name]');
+        fields.forEach(el => {
+          if (el.name in formData) el.value = formData[el.name];
+        });
+      }
+
+      // Aux modals
+      function openAuxFromTag(tagName) {
+        const content = (parsedScript.aux?.[tagName] || '').trim();
+        if (!content) return;
+        // Inject step vars before interpolation
+        const steps = getSteps();
+        const withStepVars = content
+          .replace(/\{currentStep\}/g, String(currentStep))
+          .replace(/\{totalSteps\}/g, String(steps.length));
+        const html = marked.parse(interpolateVariables(withStepVars));
+        document.getElementById('aux-title').textContent =
+          tagName.charAt(0).toUpperCase() + tagName.slice(1);
+        document.getElementById('aux-content').innerHTML = html;
+        document.getElementById('aux-dialog').showModal();
+        refreshIcons();
+      }
+      function closeStepMenuDialog() {
+        document.getElementById('step-menu-dialog').close();
+      }
+
+      function closeAux() {
+        document.getElementById('aux-dialog').close();
+      }
+
+      // Database dialog functions
+      function openDatabaseDialog() {
+        const dialog = document.getElementById('database-dialog');
+        dialog.showModal();
+        displayRecords(); // Load records when dialog opens
+        refreshIcons();
+      }
+
+      function closeDatabaseDialog() {
+        document.getElementById('database-dialog').close();
+      }
+
+      // -------------------------------
+      // Splash Screen Logic
+      // -------------------------------
+      function initSplashScreen() {
+        // Parse the script to get welcome view content for splash
+        const scriptElement = document.querySelector('script[type="text/ai-web-script"]');
+        if (scriptElement) {
+          const parser = new AIWebScriptParser();
+          const parsed = parser.parse(scriptElement.textContent);
+
+          // Use splash tag content as splash screen
+          if (parsed.splash) {
+            const splashContent = parsed.splash;
+
+            // Simple interpolation for splash (no form data or AI data yet)
+            let interpolated = splashContent;
+
+            // Only interpolate metadata and data variables for splash
+            for (const [key, value] of Object.entries(parsed.metadata || {})) {
+              interpolated = interpolated.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+            }
+
+            for (const [key, value] of Object.entries(parsed.data || {})) {
+              if (Array.isArray(value)) {
+                const listText = value.map((item, i) => `${i + 1}. ${item}`).join('\n');
+                interpolated = interpolated.replace(new RegExp(`\\{${key}\\}`, 'g'), listText);
+              } else {
+                interpolated = interpolated.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+              }
+            }
+
+            const html = marked.parse(interpolated);
+
+            // Replace splash content with welcome view content
+            const splashEl = document.getElementById('splash');
+            splashEl.innerHTML = html;
+          }
+        }
+
+        // Splash screen handler
+        setTimeout(() => {
+          const splash = document.getElementById('splash');
+          const appWrapper = document.getElementById('app-wrapper');
+
+          splash.classList.add('fade-out');
+
+          setTimeout(() => {
+            splash.style.display = 'none';
+            appWrapper.classList.add('show');
+          }, 1000);
+        }, 2500);
+      }
+
+      // -------------------------------
+      // Init
+      // -------------------------------
+      async function init() {
+        const scriptElement = document.querySelector('script[type="text/ai-web-script"]');
+        if (!scriptElement) return console.error('No AI.Web.Script found');
+
+        const parser = new AIWebScriptParser();
+        parsedScript = parser.parse(scriptElement.textContent);
+        stepsCache = null;
+
+        // AI will handle city selection when needed
+
+        renderWizard();
+        renderStepMenu();
+        attachEventListeners();
+        restoreFormValues(document);
+        refreshIcons();
+
+        // Update UI after everything is rendered and event listeners are attached
+        // Small delay to ensure DOM is fully ready
+        setTimeout(() => {
+          updateUI();
+        }, 50);
+      }
+
+
+      // API key validation with connectivity test
+      async function validateAPIKey(apiKey) {
+        if (!apiKey || !apiKey.trim()) {
+          return { valid: false, error: 'No API key provided' };
+        }
+
+        // Basic format validation
+        if (!apiKey.startsWith('gsk_')) {
+          return { valid: false, error: 'Invalid API key format. Groq API keys should start with "gsk_". Please check you\'re using a Groq API key (not xAI Grok API key) from console.groq.com' };
+        }
+
+        if (apiKey.length < 40) {
+          return { valid: false, error: 'API key appears too short. Groq API keys are typically around 50 characters long.' };
+        }
+
+        // Test connectivity with a simple request
+        try {
+          const testResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'llama-3.1-8b-instant',
+              messages: [{ role: 'user', content: 'Hello' }],
+              max_tokens: 5
+            })
+          });
+
+          if (!testResponse.ok) {
+            if (testResponse.status === 401) {
+              return { valid: false, error: 'Authentication failed. Please check your Groq API key is valid and active. Get a free key at console.groq.com' };
+            } else if (testResponse.status === 429) {
+              return { valid: false, error: 'Rate limit exceeded. Please wait a moment and try again, or upgrade your Groq plan.' };
+            } else {
+              const errorText = await testResponse.text();
+              return { valid: false, error: `API error: ${testResponse.status} ${testResponse.statusText} - ${errorText}` };
+            }
+          }
+
+          return { valid: true };
+        } catch (error) {
+          return { valid: false, error: `Connection error: ${error.message}. Please check your internet connection and try again.` };
+        }
+      }
+
+      // Real-time API key validation (debounced)
+      let validationTimeout = null;
+      async function validateAPIKeyRealTime(apiKey) {
+        // Clear previous timeout
+        if (validationTimeout) {
+          clearTimeout(validationTimeout);
+        }
+
+        // Hide status initially
+        const statusEl = document.getElementById('api-key-status');
+        const messageEl = document.getElementById('api-key-message');
+        if (statusEl) statusEl.style.display = 'none';
+
+        // Debounce validation
+        validationTimeout = setTimeout(async () => {
+          if (!apiKey || apiKey.trim().length < 10) {
+            return; // Don't validate very short keys
+          }
+
+          try {
+            const validation = await validateAPIKey(apiKey);
+            if (statusEl && messageEl) {
+              statusEl.style.display = 'block';
+              if (validation.valid) {
+                statusEl.style.backgroundColor = '#d4edda';
+                statusEl.style.borderColor = '#c3e6cb';
+                statusEl.style.color = '#155724';
+                messageEl.textContent = '✓ API key is valid and connected - selecting city...';
+
+                // Generate city selection for display
+                generateDisplayAIData().then(() => {
+                  // Update status message
+                  messageEl.textContent = '✓ API key is valid and connected';
+                  // ONLY update if we're still on step 1 (the welcome view)
+                  if (currentStep === 1) {
+                    // Don't update the UI, just update the content silently
+                    // The city will be shown when user navigates to step 2
+                  }
+                }).catch(() => {
+                  // Update status message
+                  messageEl.textContent = '✓ API key is valid and connected';
+                });
+              } else {
+                statusEl.style.backgroundColor = '#f8d7da';
+                statusEl.style.borderColor = '#f5c6cb';
+                statusEl.style.color = '#721c24';
+                messageEl.textContent = `✗ ${validation.error}`;
+              }
+            }
+          } catch (error) {
+            if (statusEl && messageEl) {
+              statusEl.style.display = 'block';
+              statusEl.style.backgroundColor = '#f8d7da';
+              statusEl.style.borderColor = '#f5c6cb';
+              statusEl.style.color = '#721c24';
+              messageEl.textContent = `✗ Validation error: ${error.message}`;
+            }
+          }
+        }, 1000); // 1 second debounce
+      }
+
+      // AI generation - requires valid API key
+      async function generateAIData() {
+        const apiKey = formData['groq-api-key'];
+
+        // Validate API key first
+        const validation = await validateAPIKey(apiKey);
+        if (!validation.valid) {
+          throw new Error(validation.error);
+        }
+
+        // Use Groq API
+        await generateWithGroqAPI(apiKey);
+      }
+
+      // Generate AI data for display purposes (like city selection)
+      async function generateDisplayAIData() {
+        const apiKey = formData['groq-api-key'];
+
+        // Only generate if we have an API key and need display data
+        if (apiKey && apiKey.trim()) {
+          try {
+            const validation = await validateAPIKey(apiKey);
+            if (validation.valid) {
+              // Generate only the ai-selected-city for display
+              await generateCitySelection(apiKey);
+            }
+          } catch (error) {
+            console.log('Could not generate display AI data:', error.message);
+          }
+        }
+      }
+
+      // Generate city selection for display
+      async function generateCitySelection(apiKey) {
+        if (aiData['ai-selected-city'] || isSelectingCity) {
+          return; // Already selected or in progress
+        }
+
+        isSelectingCity = true;
+        const cities = parsedScript.data.cities || [];
+        const citiesList = cities.join(', ');
+
+        const prompt = `Select one city from: ${citiesList}. Respond with only the city name.`;
+
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'llama-3.1-8b-instant',
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.8,
+              max_tokens: 20
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const selectedCity = data.choices[0].message.content.trim();
+
+            // Verify the selected city is in our list
+            if (cities.includes(selectedCity)) {
+              aiData['ai-selected-city'] = selectedCity;
+              console.log('AI selected city:', selectedCity);
+            } else {
+              // Fallback to random selection if AI response is invalid
+              const randomCity = cities[Math.floor(Math.random() * cities.length)];
+              aiData['ai-selected-city'] = randomCity;
+              console.log('AI response invalid, using random city:', randomCity);
+            }
+          } else {
+            // If API call fails, use random selection
+            const randomCity = cities[Math.floor(Math.random() * cities.length)];
+            aiData['ai-selected-city'] = randomCity;
+            console.log('API call failed, using random city:', randomCity);
+          }
+        } catch (error) {
+          console.log('Error generating city selection:', error);
+          // If all else fails, use random selection
+          const randomCity = cities[Math.floor(Math.random() * cities.length)];
+          aiData['ai-selected-city'] = randomCity;
+          console.log('Error occurred, using random city:', randomCity);
+        } finally {
+          isSelectingCity = false;
+        }
+      }
+
+      // Groq API implementation
+      async function generateWithGroqAPI(apiKey) {
+        // Get all AI variables that need to be generated (excluding those already set)
+        const aiVariables = Object.keys(parsedScript.aiGenerated || {});
+        const variablesToGenerate = aiVariables.filter(key => !aiData[key]);
+
+        if (variablesToGenerate.length === 0) {
+          console.log('No AI variables need generation');
+          return;
+        }
+
+        // Build dynamic prompt based on AI-GENERATED section
+        const promptInstructions = variablesToGenerate.map(key => {
+          const instruction = parsedScript.aiGenerated[key];
+          return `- ${key}: ${instruction}`;
+        }).join('\n');
+
+        // Get context variables for the prompt
+        const city = aiData['ai-selected-city'];
+        const userFacts = formData['city-facts'] || '';
+
+        // Prepare the dynamic prompt
+        const evaluationPrompt = `You are an expert geography teacher. Evaluate the following facts about ${city} provided by a student:
+
+Student's facts: "${userFacts}"
+
+Please provide the following information:
+${promptInstructions}
+
+Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
+
+        // Try different models in order of preference
+        const models = ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama-3-8b-8192'];
+
+        for (const model of models) {
+          try {
+            const requestBody = {
+              model: model,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a helpful assistant that responds in JSON format.'
+                },
+                {
+                  role: 'user',
+                  content: evaluationPrompt
+                }
+              ],
+              temperature: 0.7,
+              max_tokens: 500,
+              response_format: { type: "json_object" }
+            };
+
+            console.log(`Trying Groq API with model: ${model}`, {
+              url: 'https://api.groq.com/openai/v1/chat/completions',
+              headers: {
+                'Authorization': `Bearer ${apiKey.substring(0, 10)}...`,
+                'Content-Type': 'application/json',
+              },
+              body: requestBody
+            });
+
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody)
+            });
+
+            console.log(`Groq API Response Status for ${model}:`, response.status, response.statusText);
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`Groq API Error Response for ${model}:`, errorText);
+
+              // Provide user-friendly error messages
+              let userMessage = '';
+              if (response.status === 401) {
+                userMessage = 'Authentication failed. Please check your Groq API key is valid and active. Get a free key at console.groq.com';
+              } else if (response.status === 429) {
+                userMessage = 'Rate limit exceeded. Please wait a moment and try again, or upgrade your Groq plan.';
+              } else if (response.status === 400) {
+                userMessage = 'Bad request. Please ensure you\'re using a valid Groq API key from console.groq.com';
+              } else {
+                userMessage = `API error: ${response.status} ${response.statusText} - ${errorText}`;
+              }
+
+              // If this is the last model, throw the error
+              if (model === models[models.length - 1]) {
+                throw new Error(userMessage);
+              }
+              // Otherwise, try the next model
+              continue;
+            }
+
+            const data = await response.json();
+            console.log(`Groq API Success Response for ${model}:`, data);
+
+            const aiResponse = data.choices[0].message.content;
+
+            // Parse the JSON response (guaranteed to be valid JSON with response_format)
+            const parsed = JSON.parse(aiResponse);
+            console.log('Parsed JSON successfully:', parsed);
+            console.log('Variables to generate:', variablesToGenerate);
+            console.log('Raw response values:', variablesToGenerate.map(key => ({ key, value: parsed[key], type: typeof parsed[key] })));
+
+            // Dynamically assign all AI variables from the response
+            variablesToGenerate.forEach(key => {
+              const value = parsed[key];
+              if (value === undefined || value === null) {
+                aiData[key] = `${key} not provided`;
+              } else if (Array.isArray(value)) {
+                // Handle arrays - convert to readable format
+                aiData[key] = value.map(item =>
+                  typeof item === 'object' ? JSON.stringify(item) : String(item)
+                ).join('\n');
+              } else if (typeof value === 'object') {
+                // Handle objects - convert to readable format
+                aiData[key] = JSON.stringify(value, null, 2);
+              } else {
+                // Handle strings, numbers, etc.
+                aiData[key] = String(value);
+              }
+            });
+
+            console.log('Set aiData:', aiData);
+
+            // Success! Break out of the model loop
+            return;
+
+          } catch (error) {
+            console.error(`Error with model ${model}:`, error);
+            // If this is the last model, re-throw the error
+            if (model === models[models.length - 1]) {
+              throw error;
+            }
+            // Otherwise, try the next model
+            continue;
+          }
+        }
+      }
+
+
+      // -------------------------------
+      // Rendering
+      // -------------------------------
+      function interpolateVariables(content) {
+        let result = content;
+
+        // Metadata
+        for (const [key, value] of Object.entries(parsedScript.metadata))
+          result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+
+        // Data (arrays -> simple numbered text list)
+        for (const [key, value] of Object.entries(parsedScript.data)) {
+          if (Array.isArray(value)) {
+            const listText = value.map((item, i) => `${i + 1}. ${item}`).join('\n');
+            result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), listText);
+          } else {
+            result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+          }
+        }
+
+        // AI-generated
+        for (const [key, value] of Object.entries(aiData)) {
+          result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+        }
+
+        // Handle missing AI variables with loading placeholders
+        if (result.includes('{ai-selected-city}')) {
+          if (aiData['ai-selected-city']) {
+            result = result.replace(/\{ai-selected-city\}/g, aiData['ai-selected-city']);
+          } else {
+            result = result.replace(/\{ai-selected-city\}/g, 'a random city (selecting...)');
+          }
+        }
+
+        // Form data
+        for (const [key, value] of Object.entries(formData))
+          result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value || '[not provided]');
+
+        return result;
+      }
+
+      function renderWizard() {
+        const steps = getSteps();
+        const mainContent = document.getElementById('main-content');
+
+        mainContent.innerHTML = steps.map(step => {
+          const view = parsedScript.views[step.viewName];
+          const interpolated = interpolateVariables(view.content);
+          const html = marked.parse(interpolated);
+          return `<div id="step-${step.id}" class="step-content" data-step="${step.id}">${html}</div>`;
+        }).join('');
+
+        restoreFormValues(mainContent);
+        refreshIcons();
+      }
+
+      // New function to update only a specific step's content without rebuilding the entire DOM
+      function updateStepContent(stepId) {
+        const stepElement = document.getElementById(`step-${stepId}`);
+        if (!stepElement) return;
+
+        const steps = getSteps();
+        const step = steps.find(s => s.id === stepId);
+        if (!step) return;
+
+        const view = parsedScript.views[step.viewName];
+        const interpolated = interpolateVariables(view.content);
+        const html = marked.parse(interpolated);
+
+        stepElement.innerHTML = html;
+        restoreFormValues(stepElement);
+        refreshIcons();
+      }
+
+      function renderStepMenu() {
+        const steps = getSteps();
+        const menu = document.getElementById('step-menu');
+
+        // Create step navigation items
+        const stepItems = steps.map(step => `
+        <li><a href="#" data-step="${step.id}">${step.id}/${steps.length} - ${step.name}</a></li>
+      `).join('');
+
+        // Create auxiliary menu items
+        const auxItems = `
+        <li><a href="#" data-aux="help" class="secondary"><i data-lucide="help-circle"></i> Help</a></li>
+        <li><a href="#" data-aux="about" class="secondary"><i data-lucide="info"></i> About</a></li>
+        <li><a href="#" data-aux="settings" class="secondary"><i data-lucide="settings"></i> Settings</a></li>
+        <li><a href="#" data-db="manager" class="secondary"><i data-lucide="database"></i> DB Inspector</a></li>
+      `;
+
+        menu.innerHTML = stepItems + auxItems;
+      }
+
+      // -------------------------------
+      // Events
+      // -------------------------------
+      function attachEventListeners() {
+        // Step control buttons
+        document.getElementById('back-btn').addEventListener('click', previousStep);
+        document.getElementById('next-btn').addEventListener('click', nextStep);
+
+        // Hamburger menu button
+        document.getElementById('step-menu-btn').addEventListener('click', () => {
+          document.getElementById('step-menu-dialog').showModal();
+          refreshIcons();
+        });
+
+        // Step menu dialog click -> navigate or open aux
+        document.getElementById('step-menu').addEventListener('click', async (e) => {
+          const stepLink = e.target.closest('a[data-step]');
+          const auxLink = e.target.closest('a[data-aux]');
+          const dbLink = e.target.closest('a[data-db]');
+
+          if (stepLink) {
+            e.preventDefault();
+            const stepId = parseInt(stepLink.dataset.step, 10);
+            await goToStep(stepId);
+            closeStepMenuDialog();
+          } else if (auxLink) {
+            e.preventDefault();
+            const auxType = auxLink.dataset.aux;
+            closeStepMenuDialog();
+            openAuxFromTag(auxType);
+          } else if (dbLink) {
+            e.preventDefault();
+            const dbType = dbLink.dataset.db;
+            if (dbType === 'manager') {
+              closeStepMenuDialog();
+              openDatabaseDialog();
+            }
+          }
+        });
+
+        // Track form input live into formData
+        document.addEventListener('input', (e) => {
+          const t = e.target;
+          if (t && t.name) {
+            formData[t.name] = t.value;
+
+            // Real-time API key validation
+            if (t.name === 'groq-api-key') {
+              validateAPIKeyRealTime(t.value);
+            }
+          }
+        });
+        document.addEventListener('change', (e) => {
+          const t = e.target;
+          if (t && t.name) {
+            formData[t.name] = t.value;
+
+            // Real-time API key validation
+            if (t.name === 'groq-api-key') {
+              validateAPIKeyRealTime(t.value);
+            }
+          }
+        });
+
+
+        // Step menu dialog close buttons
+        document.getElementById('step-menu-close').addEventListener('click', closeStepMenuDialog);
+        document.getElementById('step-menu-ok').addEventListener('click', closeStepMenuDialog);
+        document.getElementById('step-menu-dialog').addEventListener('cancel', (e) => { e.preventDefault(); closeStepMenuDialog(); });
+
+        // Aux dialog close buttons
+        document.getElementById('aux-close').addEventListener('click', closeAux);
+        document.getElementById('aux-ok').addEventListener('click', closeAux);
+        document.getElementById('aux-dialog').addEventListener('cancel', (e) => { e.preventDefault(); closeAux(); });
+
+        // Save button event listener
+        const saveBtn = document.getElementById('save-btn');
+        if (saveBtn) {
+          saveBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+              await saveToDatabase();
+            } catch (error) {
+              console.error('Save failed:', error);
+            }
+          });
+        }
+
+        // Database dialog event listeners
+        document.getElementById('db-close').addEventListener('click', closeDatabaseDialog);
+        document.getElementById('db-ok').addEventListener('click', closeDatabaseDialog);
+        document.getElementById('database-dialog').addEventListener('cancel', (e) => { e.preventDefault(); closeDatabaseDialog(); });
+
+        // Database control buttons
+        document.getElementById('refresh-db').addEventListener('click', async () => {
+          await displayRecords();
+        });
+
+        document.getElementById('clear-db').addEventListener('click', async () => {
+          if (confirm('Are you sure you want to clear all records from the database? This action cannot be undone.')) {
+            const success = await clearAllRecords();
+            if (success) {
+              await displayRecords();
+              alert('All records have been cleared from the database.');
+            } else {
+              alert('Failed to clear records from the database.');
+            }
+          }
+        });
+      }
+
+      // -------------------------------
+      // Navigation
+      // -------------------------------
+      async function goToStep(stepId) {
+        const steps = getSteps();
+        if (stepId >= 1 && stepId <= steps.length) {
+          currentStep = stepId;
+
+          // Generate city selection when moving to step 2 (input step)
+          if (stepId === 2) {
+            try {
+              // Ensure city is selected for step 2
+              await generateDisplayAIData();
+              console.log('City selection completed, aiData:', aiData);
+              // Update step 2 content to show the selected city
+              updateStepContent(2);
+            } catch (error) {
+              console.log('City selection failed:', error.message);
+              // Continue anyway, the placeholder will show
+            }
+          }
+
+          // Generate AI data when moving to output step (step 3)
+          // This ensures the API key and user facts are available
+          if (stepId === 3) {
+            try {
+              await generateAIData();
+              // After AI generation, update only the output step content
+              updateStepContent(3);
+              // Re-attach event listeners for the save button
+              attachEventListeners();
+            } catch (error) {
+              // Show error message to user
+              alert(`AI Generation Failed: ${error.message}\n\nPlease check your API key and try again.`);
+              // Stay on current step instead of proceeding
+              currentStep = 2;
+              return;
+            }
+          }
+
+          // Always update UI to show/hide the correct step
+          updateUI();
+          refreshIcons();
+
+          // Scroll to top when navigating between steps
+          window.scrollTo(0, 0);
+        }
+      }
+
+      async function previousStep() {
+        if (currentStep > 1) await goToStep(currentStep - 1);
+      }
+
+      async function nextStep() {
+        // Prevent navigation if city selection is in progress
+        if (isSelectingCity) {
+          console.log('City selection in progress, please wait...');
+          return;
+        }
+
+        const steps = getSteps();
+        if (currentStep < steps.length) await goToStep(currentStep + 1);
+      }
+
+      // -------------------------------
+      // UI update
+      // -------------------------------
+      function updateUI() {
+        const steps = getSteps();
+        const maxSteps = steps.length;
+        const currentStepData = steps[currentStep - 1];
+
+        const progressEl = document.getElementById('interactive-progress');
+        progressEl.value = currentStep;
+        progressEl.max = maxSteps;
+        progressEl.setAttribute('aria-valuetext', `Step ${currentStep} of ${maxSteps}`);
+
+        // Title text (preserve icon)
+        const stepTitle = document.getElementById('step-title');
+        const titleIcon = stepTitle.querySelector('i[data-lucide]');
+        stepTitle.textContent = `${currentStep}. ${currentStepData.name}`;
+        if (titleIcon) stepTitle.prepend(titleIcon);
+
+        // Show active step content
+        document.querySelectorAll('.step-content').forEach(article => {
+          const stepId = parseInt(article.dataset.step, 10);
+          article.classList.toggle('active', stepId === currentStep);
+        });
+
+        // Highlight current item in dropdown
+        document.querySelectorAll('#step-menu a[data-step]').forEach(a => {
+          const stepId = parseInt(a.dataset.step, 10);
+          a.toggleAttribute('aria-current', stepId === currentStep);
+        });
+
+        // Buttons
+        document.getElementById('back-btn').disabled = currentStep === 1;
+        const nextBtn = document.getElementById('next-btn');
+        nextBtn.disabled = currentStep === maxSteps || isSelectingCity;
+
+        // Update Next button text when city selection is in progress
+        if (isSelectingCity && currentStep === 1) {
+          nextBtn.innerHTML = 'Selecting city... <i data-lucide="loader-2"></i>';
+        } else {
+          nextBtn.innerHTML = 'Next <i data-lucide="arrow-right"></i>';
+        }
+
+        // Ensure icons are refreshed after DOM updates
+        refreshIcons();
+      }
+
+      // -------------------------------
+      // Start the application
+      // -------------------------------
+      // Initialize splash screen first
+      initSplashScreen();
+
+      // Initialize main app after splash
+      setTimeout(() => {
+        init();
+      }, 100); // Small delay to ensure splash is set up
+    </script>
+  </div> <!-- End app-wrapper -->
+</body>
+
+</html>
