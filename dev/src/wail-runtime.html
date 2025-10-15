@@ -203,12 +203,7 @@
 <body>
   <!-- Splash Screen -->
   <div id="splash">
-    <article class="container">
-      <hgroup>
-        <h1> AI markup language example </h1>
-        <p>Loading your interactive experience...</p>
-      </hgroup>
-    </article>
+    <!-- Content will be populated from WAIL script -->
   </div>
 
   <!-- Main Application Wrapper -->
@@ -825,9 +820,13 @@ _Coming soon:_ theme, export, and defaults.
 
             const html = marked.parse(interpolated);
 
-            // Replace splash content with welcome view content
+            // Replace splash content with WAIL script content, wrapped in Pico CSS structure
             const splashEl = document.getElementById('splash');
-            splashEl.innerHTML = html;
+            splashEl.innerHTML = `<article class="container">${html}</article>`;
+          } else {
+            // Fallback if no splash content in WAIL script
+            const splashEl = document.getElementById('splash');
+            splashEl.innerHTML = `<article class="container"><h1>Loading...</h1><p>Preparing your experience...</p></article>`;
           }
         }
 
