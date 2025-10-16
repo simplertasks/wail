@@ -198,11 +198,35 @@
         </div>
       </div>
 
-      <!-- Database Table Section -->
-      <div class="container" id="database-table-section" style="margin-top: 2rem;">
+      <!-- User Results Table Section -->
+      <div class="container" id="user-results-section" style="margin-top: 2rem;">
         <details>
           <summary style="cursor: pointer; font-size: 1.2rem; font-weight: bold; padding: 0.5rem 0;">
-            <i data-lucide="database"></i> Database Records
+            <i data-lucide="trophy"></i> Your Quiz Results
+          </summary>
+          <div id="user-results-container" style="margin-top: 1rem;">
+            <table id="user-results-table" class="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>City</th>
+                  <th>Grade</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <!-- Developer Database Table Section (Hidden at bottom) -->
+      <div class="container" id="database-table-section" style="margin-top: 2rem; opacity: 0.7;">
+        <details>
+          <summary style="cursor: pointer; font-size: 1rem; font-weight: normal; padding: 0.5rem 0; color: #666;">
+            <i data-lucide="database"></i> Developer: Full Database Records
           </summary>
           <div id="database-table-container" style="margin-top: 1rem;">
             <table id="database-table" class="table">
@@ -607,6 +631,7 @@ _Coming soon:_ theme, export, and defaults.
         let stepsCache = null;
         let aiDataCache = {}; // Smart caching for AI responses
         let dataTable = null; // Simple-DataTables instance
+        let userResultsTable = null; // User results table instance
 
         // Cache frequently accessed DOM elements
         const domCache = {
@@ -665,9 +690,10 @@ _Coming soon:_ theme, export, and defaults.
             // Show success feedback
             notyf.success(`Record saved successfully! ID: ${id}`);
 
-            // Refresh the database table
-            console.log('Refreshing database table after save...');
+            // Refresh both tables
+            console.log('Refreshing tables after save...');
             initializeDatabaseTable();
+            initializeUserResultsTable();
 
             return id;
           } catch (error) {
@@ -785,6 +811,173 @@ _Coming soon:_ theme, export, and defaults.
             console.error('Failed to initialize database table:', error);
             const tableBody = document.querySelector('#database-table tbody');
             tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Error loading records: ' + error.message + '</td></tr>';
+          }
+        }
+
+        // Function to initialize and populate the user results table
+        async function initializeUserResultsTable() {
+          try {
+            console.log('initializeUserResultsTable called');
+            const records = await getAllRecords();
+            console.log('Retrieved records for user table:', records.length);
+
+            if (records.length === 0) {
+              if (userResultsTable) {
+                userResultsTable.destroy();
+                userResultsTable = null;
+              }
+              const tableBody = document.querySelector('#user-results-table tbody');
+              tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; font-style: italic;">No quiz results yet. Complete the quiz to see your results here!</td></tr>';
+              return;
+            }
+
+            // Prepare data for user results table (simplified)
+            const userTableData = records.map(record => {
+              const createdDate = new Date(record.created).toLocaleDateString();
+              const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
+              const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
+
+              return [
+                createdDate,
+                city,
+                grade,
+                `<button class="secondary" onclick="editUserRecord(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.25rem;">
+                  <i data-lucide="edit"></i>
+                  Edit
+                </button>
+                <button class="secondary" onclick="viewRecordDetails(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                  <i data-lucide="eye"></i>
+                  View
+                </button>`
+              ];
+            });
+
+            // Initialize or update user results table
+            if (userResultsTable) {
+              console.log('Updating existing user results table');
+              userResultsTable.destroy();
+              userResultsTable = null;
+            }
+
+            if (!userResultsTable) {
+              console.log('Creating new user results table with', records.length, 'records');
+
+              // Clear the table body first
+              const tableBody = document.querySelector('#user-results-table tbody');
+              tableBody.innerHTML = '';
+
+              userResultsTable = new simpleDatatables.DataTable("#user-results-table", {
+                searchable: true,
+                sortable: true,
+                paging: true,
+                perPage: 5,
+                perPageSelect: [3, 5, 10],
+                labels: {
+                  placeholder: "Search your results...",
+                  perPage: "Results per page:",
+                  noRows: "No results found",
+                  info: "Showing {start} to {end} of {rows} results"
+                }
+              });
+
+              // Insert all the data
+              userResultsTable.insert({ data: userTableData });
+
+              console.log('User results table created and populated successfully');
+            }
+
+            // Refresh icons after table is created
+            refreshIcons();
+
+            // Ensure the details element is open when new data is added
+            const detailsElement = document.querySelector('#user-results-section details');
+            if (detailsElement && records.length > 0) {
+              detailsElement.open = true;
+            }
+
+          } catch (error) {
+            console.error('Failed to initialize user results table:', error);
+            const tableBody = document.querySelector('#user-results-table tbody');
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Error loading results: ' + error.message + '</td></tr>';
+          }
+        }
+
+        // Function to edit a user record
+        async function editUserRecord(recordId) {
+          try {
+            const record = await db.records.get(recordId);
+            if (!record) {
+              notyf.error('Record not found');
+              return;
+            }
+
+            // Create edit dialog
+            const editDialog = document.createElement('dialog');
+            editDialog.innerHTML = `
+            <article>
+              <header>
+                <strong>Edit Your Quiz Result</strong>
+                <button id="edit-close" aria-label="Close" class="close"></button>
+              </header>
+              <div>
+                <p><strong>Date:</strong> ${new Date(record.created).toLocaleString()}</p>
+                <p><strong>City:</strong> ${record.data?.aiData?.['ai-selected-city'] || 'N/A'}</p>
+                <p><strong>Current Grade:</strong> ${record.data?.aiData?.['ai-grade'] || 'N/A'}</p>
+                
+                <h4>Your Facts About the City:</h4>
+                <textarea id="edit-city-facts" rows="4" style="width: 100%; margin-bottom: 1rem;">${record.data?.formData?.['city-facts'] || ''}</textarea>
+                
+                <p><small>Note: Editing your facts will not automatically regenerate the AI evaluation and grade.</small></p>
+              </div>
+              <footer>
+                <button id="edit-save" class="primary">Save Changes</button>
+                <button id="edit-cancel" class="secondary">Cancel</button>
+              </footer>
+            </article>
+          `;
+
+            document.body.appendChild(editDialog);
+            editDialog.showModal();
+
+            // Add event listeners
+            editDialog.querySelector('#edit-close').addEventListener('click', () => {
+              editDialog.close();
+              document.body.removeChild(editDialog);
+            });
+
+            editDialog.querySelector('#edit-cancel').addEventListener('click', () => {
+              editDialog.close();
+              document.body.removeChild(editDialog);
+            });
+
+            editDialog.querySelector('#edit-save').addEventListener('click', async () => {
+              const newFacts = editDialog.querySelector('#edit-city-facts').value;
+
+              // Update the record
+              record.data.formData['city-facts'] = newFacts;
+              record.updated = new Date().toISOString();
+
+              await db.records.put(record);
+
+              notyf.success('Record updated successfully!');
+
+              // Refresh both tables
+              initializeDatabaseTable();
+              initializeUserResultsTable();
+
+              editDialog.close();
+              document.body.removeChild(editDialog);
+            });
+
+            editDialog.addEventListener('cancel', (e) => {
+              e.preventDefault();
+              editDialog.close();
+              document.body.removeChild(editDialog);
+            });
+
+          } catch (error) {
+            console.error('Failed to edit record:', error);
+            notyf.error('Failed to edit record: ' + error.message);
           }
         }
 
@@ -1108,8 +1301,9 @@ _Coming soon:_ theme, export, and defaults.
           // Small delay to ensure DOM is fully ready
           setTimeout(() => {
             updateUI();
-            // Initialize the database table
+            // Initialize both tables
             initializeDatabaseTable();
+            initializeUserResultsTable();
 
             // Add event listener for details element toggle to refresh icons
             const detailsElement = document.querySelector('#database-table-section details');
@@ -1698,8 +1892,9 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               const success = await clearAllRecords();
               if (success) {
                 await displayRecords();
-                // Also refresh the main database table
+                // Also refresh both tables
                 initializeDatabaseTable();
+                initializeUserResultsTable();
                 notyf.success('All records have been cleared from the database.');
               } else {
                 notyf.error('Failed to clear records from the database.');
