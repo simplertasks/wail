@@ -659,15 +659,33 @@ _Coming soon:_ theme, export, and defaults.
         // -------------------------------
         // Dexie Database
         // -------------------------------
-        const db = new Dexie('AIWebScriptDB');
-        db.version(1).stores({
-          records: '++id, created, updated, user, data'
-        });
+        // Database name will be set dynamically based on app metadata
+        let db = null;
 
-        // Initialize database
-        db.open().catch(err => {
-          console.error('Failed to open database:', err);
-        });
+        // Function to initialize database with dynamic name
+        function initializeDatabase(parsedScript) {
+          if (db) {
+            // Close existing database if it exists
+            db.close();
+          }
+
+          // Create database name from data tag names, fallback to 'wail-app'
+          const dataNames = Object.keys(parsedScript.data || {});
+          const primaryDataName = dataNames.length > 0 ? dataNames[0] : 'app';
+          const dbName = `wail-${primaryDataName}`;
+
+          db = new Dexie(dbName);
+          db.version(1).stores({
+            records: '++id, created, updated, user, data'
+          });
+
+          // Initialize database
+          db.open().catch(err => {
+            console.error('Failed to open database:', err);
+          });
+
+          console.log(`Database initialized: ${dbName}`);
+        }
 
         // Save function to store the entire adjacent object to Dexie
         async function saveToDatabase() {
@@ -1288,6 +1306,9 @@ _Coming soon:_ theme, export, and defaults.
           const parser = new WailParser();
           parsedScript = parser.parse(scriptElement.textContent);
           stepsCache = null;
+
+          // Initialize database with app data
+          initializeDatabase(parsedScript);
 
           // AI will handle city selection when needed
 
