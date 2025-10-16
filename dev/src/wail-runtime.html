@@ -198,43 +198,18 @@
         </div>
       </div>
 
-      <!-- User Results Table Section -->
-      <div class="container" id="user-results-section" style="margin-top: 2rem;">
+      <!-- Quiz Results Table Section -->
+      <div class="container" id="quiz-results-section" style="margin-top: 2rem;">
         <details>
           <summary style="cursor: pointer; font-size: 1.2rem; font-weight: bold; padding: 0.5rem 0;">
             <i data-lucide="trophy"></i> Your Quiz Results
           </summary>
-          <div id="user-results-container" style="margin-top: 1rem;">
-            <table id="user-results-table" class="table">
+          <div id="quiz-results-container" style="margin-top: 1rem;">
+            <table id="quiz-results-table" class="table">
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>City</th>
-                  <th>Grade</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Data will be populated by JavaScript -->
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </div>
-
-      <!-- Developer Database Table Section (Hidden at bottom) -->
-      <div class="container" id="database-table-section" style="margin-top: 2rem; opacity: 0.7;">
-        <details>
-          <summary style="cursor: pointer; font-size: 1rem; font-weight: normal; padding: 0.5rem 0; color: #666;">
-            <i data-lucide="database"></i> Developer: Full Database Records
-          </summary>
-          <div id="database-table-container" style="margin-top: 1rem;">
-            <table id="database-table" class="table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Created</th>
-                  <th>User Name</th>
+                  <th>Name</th>
                   <th>City</th>
                   <th>Grade</th>
                   <th>Actions</th>
@@ -323,9 +298,9 @@
 <ai-generated>
 {
   "ai-selected-city": "randomly select one city from {cities}",
-  "ai-evaluation": "Evaluate the user's response about {ai-selected-city}. The user wrote: '{city-facts}'. Provide a detailed evaluation of this specific text for accuracy and completeness. Be specific about what the user got right, wrong.",
-  "ai-grade": "assign only a single letter grade A, B, C, D, or F",
-  "ai-funfact": "generate interesting fact about {ai-selected-city}"
+  "ai-evaluation": "The user was asked to provide 3 facts about {ai-selected-city} and wrote: '{city-facts}'. Evaluate these specific facts for accuracy. Give a grade based on how many facts are correct. Don't penalize for missing information that wasn't asked for.",
+  "ai-grade": "assign only a single letter grade A, B, C, D, or F based on accuracy of the facts provided",
+  "ai-funfact": "generate one interesting fact specifically about {ai-selected-city}"
 }
 </ai-generated>
 
@@ -630,8 +605,7 @@ _Coming soon:_ theme, export, and defaults.
         let aiData = {};
         let stepsCache = null;
         let aiDataCache = {}; // Smart caching for AI responses
-        let dataTable = null; // Simple-DataTables instance
-        let userResultsTable = null; // User results table instance
+        let quizResultsTable = null; // Quiz results table instance
 
         // Cache frequently accessed DOM elements
         const domCache = {
@@ -708,10 +682,9 @@ _Coming soon:_ theme, export, and defaults.
             // Show success feedback
             notyf.success(`Record saved successfully! ID: ${id}`);
 
-            // Refresh both tables
-            console.log('Refreshing tables after save...');
-            initializeDatabaseTable();
-            initializeUserResultsTable();
+            // Refresh quiz results table
+            console.log('Refreshing quiz results table after save...');
+            initializeQuizResultsTable();
 
             return id;
           } catch (error) {
@@ -743,120 +716,34 @@ _Coming soon:_ theme, export, and defaults.
           }
         }
 
-        // Function to initialize and populate the main database table
-        async function initializeDatabaseTable() {
+        // Function to initialize and populate the quiz results table
+        async function initializeQuizResultsTable() {
           try {
-            console.log('initializeDatabaseTable called');
+            console.log('initializeQuizResultsTable called');
             const records = await getAllRecords();
             console.log('Retrieved records:', records.length);
 
             if (records.length === 0) {
               // If no records, destroy existing table if it exists
-              if (dataTable) {
-                dataTable.destroy();
-                dataTable = null;
+              if (quizResultsTable) {
+                quizResultsTable.destroy();
+                quizResultsTable = null;
               }
-              const tableBody = document.querySelector('#database-table tbody');
-              tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; font-style: italic;">No records found in the database.</td></tr>';
+              const tableBody = document.querySelector('#quiz-results-table tbody');
+              tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; font-style: italic;">No quiz results yet. Complete the quiz to see your results here!</td></tr>';
               return;
             }
 
             // Prepare data for Simple-DataTables
             const tableData = records.map(record => {
-              const createdDate = new Date(record.created).toLocaleString();
+              const createdDate = new Date(record.created).toLocaleDateString();
               const userName = record.data?.formData?.['user-name'] || 'N/A';
               const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
               const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
 
               return [
-                record.id,
                 createdDate,
                 userName,
-                city,
-                grade,
-                `<button class="secondary" onclick="viewRecordDetails(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                  <i data-lucide="eye"></i>
-                  View
-                </button>`
-              ];
-            });
-
-            // Initialize or update Simple-DataTables
-            if (dataTable) {
-              console.log('Updating existing DataTable with new data');
-              // Clear existing data and insert all records
-              dataTable.destroy();
-              dataTable = null;
-            }
-
-            if (!dataTable) {
-              console.log('Creating new DataTable with', records.length, 'records');
-
-              // Clear the table body first
-              const tableBody = document.querySelector('#database-table tbody');
-              tableBody.innerHTML = '';
-
-              dataTable = new simpleDatatables.DataTable("#database-table", {
-                searchable: true,
-                sortable: true,
-                paging: true,
-                perPage: 10,
-                perPageSelect: [5, 10, 15, 20],
-                labels: {
-                  placeholder: "Search records...",
-                  perPage: "Records per page:",
-                  noRows: "No records found",
-                  info: "Showing {start} to {end} of {rows} records"
-                }
-              });
-
-              // Insert all the data
-              dataTable.insert({ data: tableData });
-
-              console.log('DataTable created and populated successfully');
-            }
-
-            // Refresh icons after table is created
-            refreshIcons();
-
-            // Ensure the details element is open when new data is added
-            const detailsElement = document.querySelector('#database-table-section details');
-            if (detailsElement && records.length > 0) {
-              detailsElement.open = true;
-            }
-
-          } catch (error) {
-            console.error('Failed to initialize database table:', error);
-            const tableBody = document.querySelector('#database-table tbody');
-            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Error loading records: ' + error.message + '</td></tr>';
-          }
-        }
-
-        // Function to initialize and populate the user results table
-        async function initializeUserResultsTable() {
-          try {
-            console.log('initializeUserResultsTable called');
-            const records = await getAllRecords();
-            console.log('Retrieved records for user table:', records.length);
-
-            if (records.length === 0) {
-              if (userResultsTable) {
-                userResultsTable.destroy();
-                userResultsTable = null;
-              }
-              const tableBody = document.querySelector('#user-results-table tbody');
-              tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; font-style: italic;">No quiz results yet. Complete the quiz to see your results here!</td></tr>';
-              return;
-            }
-
-            // Prepare data for user results table (simplified)
-            const userTableData = records.map(record => {
-              const createdDate = new Date(record.created).toLocaleDateString();
-              const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
-              const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
-
-              return [
-                createdDate,
                 city,
                 grade,
                 `<button class="secondary" onclick="editUserRecord(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.25rem;">
@@ -870,28 +757,29 @@ _Coming soon:_ theme, export, and defaults.
               ];
             });
 
-            // Initialize or update user results table
-            if (userResultsTable) {
-              console.log('Updating existing user results table');
-              userResultsTable.destroy();
-              userResultsTable = null;
+            // Initialize or update Simple-DataTables
+            if (quizResultsTable) {
+              console.log('Updating existing quiz results table with new data');
+              // Clear existing data and insert all records
+              quizResultsTable.destroy();
+              quizResultsTable = null;
             }
 
-            if (!userResultsTable) {
-              console.log('Creating new user results table with', records.length, 'records');
+            if (!quizResultsTable) {
+              console.log('Creating new quiz results table with', records.length, 'records');
 
               // Clear the table body first
-              const tableBody = document.querySelector('#user-results-table tbody');
+              const tableBody = document.querySelector('#quiz-results-table tbody');
               tableBody.innerHTML = '';
 
-              userResultsTable = new simpleDatatables.DataTable("#user-results-table", {
+              quizResultsTable = new simpleDatatables.DataTable("#quiz-results-table", {
                 searchable: true,
                 sortable: true,
                 paging: true,
                 perPage: 5,
-                perPageSelect: [3, 5, 10],
+                perPageSelect: [3, 5, 10, 15],
                 labels: {
-                  placeholder: "Search your results...",
+                  placeholder: "Search quiz results...",
                   perPage: "Results per page:",
                   noRows: "No results found",
                   info: "Showing {start} to {end} of {rows} results"
@@ -899,24 +787,24 @@ _Coming soon:_ theme, export, and defaults.
               });
 
               // Insert all the data
-              userResultsTable.insert({ data: userTableData });
+              quizResultsTable.insert({ data: tableData });
 
-              console.log('User results table created and populated successfully');
+              console.log('Quiz results table created and populated successfully');
             }
 
             // Refresh icons after table is created
             refreshIcons();
 
             // Ensure the details element is open when new data is added
-            const detailsElement = document.querySelector('#user-results-section details');
+            const detailsElement = document.querySelector('#quiz-results-section details');
             if (detailsElement && records.length > 0) {
               detailsElement.open = true;
             }
 
           } catch (error) {
-            console.error('Failed to initialize user results table:', error);
-            const tableBody = document.querySelector('#user-results-table tbody');
-            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Error loading results: ' + error.message + '</td></tr>';
+            console.error('Failed to initialize quiz results table:', error);
+            const tableBody = document.querySelector('#quiz-results-table tbody');
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: red;">Error loading results: ' + error.message + '</td></tr>';
           }
         }
 
@@ -979,9 +867,8 @@ _Coming soon:_ theme, export, and defaults.
 
               notyf.success('Record updated successfully!');
 
-              // Refresh both tables
-              initializeDatabaseTable();
-              initializeUserResultsTable();
+              // Refresh quiz results table
+              initializeQuizResultsTable();
 
               editDialog.close();
               document.body.removeChild(editDialog);
@@ -1154,6 +1041,15 @@ _Coming soon:_ theme, export, and defaults.
           });
         }
 
+        function captureCurrentFormData() {
+          const fields = document.querySelectorAll('input[name], textarea[name], select[name]');
+          fields.forEach(el => {
+            if (el.name) {
+              formData[el.name] = el.value;
+            }
+          });
+        }
+
         // Aux modals
         function openAuxFromTag(tagName) {
           const content = (parsedScript.aux?.[tagName] || '').trim();
@@ -1322,12 +1218,11 @@ _Coming soon:_ theme, export, and defaults.
           // Small delay to ensure DOM is fully ready
           setTimeout(() => {
             updateUI();
-            // Initialize both tables
-            initializeDatabaseTable();
-            initializeUserResultsTable();
+            // Initialize quiz results table
+            initializeQuizResultsTable();
 
             // Add event listener for details element toggle to refresh icons
-            const detailsElement = document.querySelector('#database-table-section details');
+            const detailsElement = document.querySelector('#quiz-results-section details');
             if (detailsElement) {
               detailsElement.addEventListener('toggle', () => {
                 // Small delay to ensure the content is rendered before refreshing icons
@@ -1442,6 +1337,17 @@ _Coming soon:_ theme, export, and defaults.
           });
         }
 
+        // Generate city selection first
+        async function generateCitySelection(apiKey) {
+          const cities = parsedScript.data.cities;
+          if (!cities || cities.length === 0) return;
+
+          // Simple random selection
+          const randomIndex = Math.floor(Math.random() * cities.length);
+          aiData['ai-selected-city'] = cities[randomIndex];
+          console.log('Selected city:', aiData['ai-selected-city']);
+        }
+
         // Groq API implementation
         async function generateWithGroqAPI(apiKey) {
           // Get all AI variables that need to be generated
@@ -1452,15 +1358,56 @@ _Coming soon:_ theme, export, and defaults.
             return;
           }
 
+          // First, generate any missing AI data that other instructions depend on
+          // This is a simplified approach - generate city selection first if needed
+          if (variablesToGenerate.includes('ai-selected-city') && !aiData['ai-selected-city']) {
+            // Generate city selection first
+            await generateCitySelection(apiKey);
+          }
+
           // Build dynamic prompt based on AI-GENERATED section
           const promptInstructions = variablesToGenerate.map(key => {
-            const instruction = parsedScript.aiGenerated[key];
+            let instruction = parsedScript.aiGenerated[key];
+
+            // Interpolate variables in the instruction itself
+            // Replace form data variables
+            for (const [formKey, formValue] of Object.entries(formData)) {
+              if (formValue && formValue.trim()) {
+                instruction = instruction.replace(new RegExp(`\\{${formKey}\\}`, 'g'), formValue);
+              }
+            }
+
+            // Replace AI data variables
+            for (const [aiKey, aiValue] of Object.entries(aiData)) {
+              if (aiValue && aiValue.trim()) {
+                instruction = instruction.replace(new RegExp(`\\{${aiKey}\\}`, 'g'), aiValue);
+              }
+            }
+
+            // Replace metadata variables
+            for (const [metaKey, metaValue] of Object.entries(parsedScript.metadata || {})) {
+              instruction = instruction.replace(new RegExp(`\\{${metaKey}\\}`, 'g'), metaValue);
+            }
+
+            // Replace data variables
+            for (const [dataKey, dataValue] of Object.entries(parsedScript.data || {})) {
+              if (Array.isArray(dataValue)) {
+                const listText = dataValue.map((item, i) => `${i + 1}. ${item}`).join('\n');
+                instruction = instruction.replace(new RegExp(`\\{${dataKey}\\}`, 'g'), listText);
+              } else {
+                instruction = instruction.replace(new RegExp(`\\{${dataKey}\\}`, 'g'), dataValue);
+              }
+            }
+
+            console.log(`Interpolated instruction for ${key}:`, instruction);
             return `- ${key}: ${instruction}`;
           }).join('\n');
 
           // Debug: Log the actual form data being sent
           console.log('Form data being sent to AI:', formData);
           console.log('AI data being sent to AI:', aiData);
+          console.log('Variables to generate:', variablesToGenerate);
+          console.log('Prompt instructions:', promptInstructions);
 
           // Extract dependencies and build context
           const dependencies = extractDependencies(parsedScript.aiGenerated);
@@ -1468,10 +1415,27 @@ _Coming soon:_ theme, export, and defaults.
             ? `Available variables: ${dependencies.join(', ')}`
             : 'No variables available';
 
+          // Build context with actual form data values
+          const formDataContext = Object.entries(formData)
+            .filter(([key, value]) => value && value.trim())
+            .map(([key, value]) => `${key}: "${value}"`)
+            .join('\n');
+
+          const aiDataContext = Object.entries(aiData)
+            .filter(([key, value]) => value && value.trim())
+            .map(([key, value]) => `${key}: "${value}"`)
+            .join('\n');
+
           // Prepare the completely generic prompt
           const evaluationPrompt = `You are a helpful AI assistant.
 
 CRITICAL RULE: Only return an empty string "" if a variable in curly braces {like-this} is completely missing, null, or literally empty. If the variable contains ANY content (even if brief), you should provide a proper response.
+
+CURRENT FORM DATA:
+${formDataContext || 'No form data available'}
+
+CURRENT AI DATA:
+${aiDataContext || 'No AI data available'}
 
 ${dependencyText}
 
@@ -1488,6 +1452,21 @@ Examples:
 
 Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
 
+          console.log('=== COMPREHENSIVE AI DEBUG LOG ===');
+          console.log('1. Form data being sent to AI:', formData);
+          console.log('2. AI data being sent to AI:', aiData);
+          console.log('3. Variables to generate:', variablesToGenerate);
+          console.log('4. Prompt instructions:', promptInstructions);
+          console.log('5. Form data context:', formDataContext);
+          console.log('6. AI data context:', aiDataContext);
+          console.log('7. Dependencies:', dependencies);
+          console.log('8. Dependency text:', dependencyText);
+          console.log('9. Final prompt being sent to AI:', evaluationPrompt);
+          console.log('10. Current aiData after city selection:', aiData);
+          console.log('11. Parsed script metadata:', parsedScript.metadata);
+          console.log('12. Parsed script data:', parsedScript.data);
+          console.log('13. Parsed script aiGenerated:', parsedScript.aiGenerated);
+          console.log('=== END DEBUG LOG ===');
 
           // Try different models in order of preference
           const models = ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama-3-8b-8192'];
@@ -1913,9 +1892,8 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               const success = await clearAllRecords();
               if (success) {
                 await displayRecords();
-                // Also refresh both tables
-                initializeDatabaseTable();
-                initializeUserResultsTable();
+                // Also refresh quiz results table
+                initializeQuizResultsTable();
                 notyf.success('All records have been cleared from the database.');
               } else {
                 notyf.error('Failed to clear records from the database.');
@@ -1939,6 +1917,9 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             if (viewContainsAIVariables(viewContent)) {
               // Only generate AI data if the view actually contains AI variables
               try {
+                // Ensure we have the latest form data before generating AI
+                captureCurrentFormData();
+                console.log('Form data before AI generation:', formData);
                 await generateAIData();
                 // Update the current step content with fresh AI data
                 updateStepContent(stepId);
