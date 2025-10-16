@@ -1,15 +1,16 @@
-# WAIL — Web AI  Language
+# WAIL — Web AI Language
 
 ## 📜 WAIL Specification Overview
 
-**WAIL (Web AI Markup Language)** is a proposed **markup specification** for creating AI-driven, step-based web applications using simple, declarative syntax.  
+**WAIL (Web AI Markup Language)** is a proposed **markup specification** for creating AI-driven, step-based web applications using simple, declarative syntax.
 
 A WAIL-compliant runtime should be able to:
-- Parse a `<script type="wail">` block containing `<meta-data>`, `<view>`, `<data>`, `<ai-generated>`, and optional auxiliary tags.  
-- Handle `{variable}` interpolation consistently across views.  
-- Execute `<ai-generated>` instructions using any LLM backend (e.g., Groq, OpenAI, Anthropic).  
-- Manage state locally or via syncable storage.  
-- Render steps in an intuitive, mobile-friendly UI flow.  
+
+- Parse a `<script type="wail">` block containing `<meta-data>`, `<view>`, `<data>`, `<ai-generated>`, and optional auxiliary tags.
+- Handle `{variable}` interpolation consistently across views.
+- Execute `<ai-generated>` instructions using any LLM backend (e.g., Groq, OpenAI, Anthropic).
+- Manage state locally or via syncable storage.
+- Render steps in an intuitive, mobile-friendly UI flow.
 
 The implementation shown below is an **example WAIL runtime**, built with **vanilla JavaScript**, **PicoCSS**, **Dexie.js**, and **Marked.js**, demonstrating one possible way to realize the WAIL specification in a single self-contained HTML file.
 
@@ -57,39 +58,39 @@ A WAIL app combines two parts in one file:
 
 ```html
 <script type="wail">
-<meta-data>
-{
-  "title": "Cities Quiz",
-  "author": "J. Smith",
-  "description": "A simple quiz testing knowledge of cities."
-}
-</meta-data>
+  <meta-data>
+  {
+    "title": "Cities Quiz",
+    "author": "J. Smith",
+    "description": "A simple quiz testing knowledge of cities."
+  }
+  </meta-data>
 
-<ai-generated>
-{
-  "ai-selected-city": "randomly select one city from {cities}",
-  "ai-grade": "assign only a single letter grade A, B, C, D, or F"
-}
-</ai-generated>
+  <ai-generated>
+  {
+    "ai-selected-city": "randomly select one city from {cities}",
+    "ai-grade": "assign only a single letter grade A, B, C, D, or F"
+  }
+  </ai-generated>
 
-<view name="welcome">
-# Welcome
-Ready to start your city quiz?
-</view>
+  <view name="welcome">
+  # Welcome
+  Ready to start your city quiz?
+  </view>
 
-<view name="input">
-Tell us three facts about {ai-selected-city}.
-</view>
+  <view name="input">
+  Tell us three facts about {ai-selected-city}.
+  </view>
 
-<data name="cities">
-["London, England", "Tokyo, Japan", "Paris, France"]
-</data>
+  <data name="cities">
+  ["London, England", "Tokyo, Japan", "Paris, France"]
+  </data>
 </script>
 ```
 
 The runtime parses this script, renders each `<view>` as a step in a wizard, and handles AI-driven variables like `{ai-selected-city}`, `{ai-grade}`, etc.
 
------
+---
 
 ## 🧩 Example: Cities Quiz
 
@@ -101,25 +102,25 @@ The demo app (`index.html`) shows how a WAIL script can:
 - Generate a letter grade and fun fact
 - Save results locally in Dexie
 
------
+---
 
 ## 📖 WAIL Syntax Reference
 
-|Tag                              |Purpose                       |Example          |
-|---------------------------------|------------------------------|-----------------|
-|`<meta-data>`                    |App title, author, description|JSON object      |
-|`<view name="">`                 |Wizard step/screen            |Markdown content |
-|`<data name="">`                 |Static data arrays/objects    |JSON or line list|
-|`<ai-generated>`                 |AI instructions               |JSON with prompts|
-|`<splash>`                       |Entry screen (API key)        |Markdown content |
-|`<help>`, `<about>`, `<settings>`|Auxiliary modals              |Markdown content |
+| Tag                               | Purpose                        | Example           |
+| --------------------------------- | ------------------------------ | ----------------- |
+| `<meta-data>`                     | App title, author, description | JSON object       |
+| `<view name="">`                  | Wizard step/screen             | Markdown content  |
+| `<data name="">`                  | Static data arrays/objects     | JSON or line list |
+| `<ai-generated>`                  | AI instructions                | JSON with prompts |
+| `<splash>`                        | Entry screen (API key)         | Markdown content  |
+| `<help>`, `<about>`, `<settings>` | Auxiliary modals               | Markdown content  |
 
 **Variable Interpolation:**
 
 - Use `{variable-name}` to reference metadata, data, form inputs, or AI-generated content
 - Variables are automatically replaced throughout your views
 
------
+---
 
 ## 💬 Creating WAIL Scripts
 
@@ -133,7 +134,7 @@ No need to write or modify any JavaScript — the runtime takes care of everythi
 
 You can even ask ChatGPT or another LLM to generate or edit just the WAIL script for you.
 
------
+---
 
 ## 🎯 Perfect For
 
@@ -143,7 +144,7 @@ You can even ask ChatGPT or another LLM to generate or edit just the WAIL script
 - **Prototypers**: Test AI workflows without infrastructure
 - **Tinkerers**: Experiment with AI without learning full-stack development
 
------
+---
 
 ## 🌍 Portability
 
@@ -156,35 +157,35 @@ Every WAIL app is a self-contained HTML file:
 
 Optional: Dexie can be extended to sync with the cloud, making backups and multi-device sync possible.
 
------
+---
 
 ## ⚖️ Why WAIL?
 
-|Traditional Approach      |WAIL                  |
-|--------------------------|----------------------|
-|React + Node + DB + API   |One HTML file         |
-|npm install, build, deploy|Just open in browser  |
-|Hundreds of files         |1 file                |
-|Requires coding skills    |Markdown + JSON       |
-|Need hosting/server       |Works offline         |
-|Complex state management  |Automatic data binding|
+| Traditional Approach       | WAIL                   |
+| -------------------------- | ---------------------- |
+| React + Node + DB + API    | One HTML file          |
+| npm install, build, deploy | Just open in browser   |
+| Hundreds of files          | 1 file                 |
+| Requires coding skills     | Markdown + JSON        |
+| Need hosting/server        | Works offline          |
+| Complex state management   | Automatic data binding |
 
------
+---
 
 ## 🧰 Tech Stack
 
-|Component   |Purpose                  |
-|------------|-------------------------|
-|PicoCSS     |Clean, responsive UI     |
-|Dexie.js    |Local storage (IndexedDB)|
-|Marked.js   |Markdown rendering       |
-|Lucide Icons|Vector icons             |
-|Notyf       |Notifications            |
-|Groq API    |AI model integration     |
+| Component    | Purpose                   |
+| ------------ | ------------------------- |
+| PicoCSS      | Clean, responsive UI      |
+| Dexie.js     | Local storage (IndexedDB) |
+| Marked.js    | Markdown rendering        |
+| Lucide Icons | Vector icons              |
+| Notyf        | Notifications             |
+| Groq API     | AI model integration      |
 
 All libraries loaded via CDN — no build process required.
 
------
+---
 
 ## 🧠 Philosophy
 
@@ -194,7 +195,7 @@ WAIL aims to democratize small AI apps — perfect for educators, creators, and 
 
 It’s inspired by the simplicity of HTML and Markdown, proving that powerful AI applications don’t require complex frameworks or infrastructure.
 
------
+---
 
 ## 🛠️ Roadmap
 
@@ -207,7 +208,7 @@ It’s inspired by the simplicity of HTML and Markdown, proving that powerful AI
 - [x] **Local storage** — Dexie.js integration ✅
 - [x] **Wizard UI** — Step-by-step navigation ✅
 
------
+---
 
 ## 🤝 Contributing
 
@@ -220,13 +221,13 @@ WAIL is experimental and welcomes contributions!
 
 All skill levels welcome — whether you’re improving docs, suggesting features, or sharing creative WAIL scripts!
 
------
+---
 
 ## 📄 License
 
 MIT License — free to use, modify, and share.
 
------
+---
 
 ## 💬 Acknowledgements
 
@@ -240,7 +241,7 @@ WAIL is inspired by the simplicity of HTML and Markdown, and powered by open web
 
 It’s a small experiment in making AI part of the web’s natural language.
 
------
+---
 
 ## 🔗 Resources
 
@@ -249,7 +250,6 @@ It’s a small experiment in making AI part of the web’s natural language.
 - [Groq API Docs](https://console.groq.com/docs)
 - [WAIL Script Templates](../../tree/main/templates) (coming soon)
 
------
+---
 
 **Built with ❤️ for the open web**
-
