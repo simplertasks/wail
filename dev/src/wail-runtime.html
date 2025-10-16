@@ -9,6 +9,8 @@
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.yellow.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css">
+  <!-- Simple-DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-datatables@latest/dist/style.css">
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
@@ -16,6 +18,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Dexie.js for database functionality -->
   <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+  <!-- Simple-DataTables JavaScript -->
+  <script src="https://cdn.jsdelivr.net/npm/simple-datatables@latest/dist/umd/simple-datatables.js"></script>
   <style>
     /* Splash Screen Styles */
     #splash {
@@ -191,6 +195,28 @@
             Next
             <i data-lucide="arrow-right"></i>
           </button>
+        </div>
+      </div>
+
+      <!-- Database Table Section -->
+      <div class="container" id="database-table-section" style="margin-top: 2rem;">
+        <h3><i data-lucide="database"></i> Database Records</h3>
+        <div id="database-table-container">
+          <table id="database-table" class="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Created</th>
+                <th>User Name</th>
+                <th>City</th>
+                <th>Grade</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Data will be populated by JavaScript -->
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -576,6 +602,7 @@ _Coming soon:_ theme, export, and defaults.
         let aiData = {};
         let stepsCache = null;
         let aiDataCache = {}; // Smart caching for AI responses
+        let dataTable = null; // Simple-DataTables instance
 
         // Cache frequently accessed DOM elements
         const domCache = {
@@ -634,6 +661,9 @@ _Coming soon:_ theme, export, and defaults.
             // Show success feedback
             notyf.success(`Record saved successfully! ID: ${id}`);
 
+            // Refresh the database table
+            initializeDatabaseTable();
+
             return id;
           } catch (error) {
             console.error('Failed to save to database:', error);
@@ -661,6 +691,73 @@ _Coming soon:_ theme, export, and defaults.
           } catch (error) {
             console.error('Failed to clear records:', error);
             return false;
+          }
+        }
+
+        // Function to initialize and populate the main database table
+        async function initializeDatabaseTable() {
+          try {
+            const records = await getAllRecords();
+            const tableBody = document.querySelector('#database-table tbody');
+
+            if (records.length === 0) {
+              tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; font-style: italic;">No records found in the database.</td></tr>';
+              return;
+            }
+
+            // Clear existing content
+            tableBody.innerHTML = '';
+
+            // Populate table with records
+            records.forEach(record => {
+              const createdDate = new Date(record.created).toLocaleString();
+              const userName = record.data?.formData?.['user-name'] || 'N/A';
+              const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
+              const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
+
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                <td>${record.id}</td>
+                <td>${createdDate}</td>
+                <td>${userName}</td>
+                <td>${city}</td>
+                <td>${grade}</td>
+                <td>
+                  <button class="secondary" onclick="viewRecordDetails(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                    <i data-lucide="eye"></i>
+                    View
+                  </button>
+                </td>
+              `;
+              tableBody.appendChild(row);
+            });
+
+            // Initialize or refresh Simple-DataTables
+            if (dataTable) {
+              dataTable.destroy();
+            }
+
+            dataTable = new simpleDatatables.DataTable("#database-table", {
+              searchable: true,
+              sortable: true,
+              paging: true,
+              perPage: 10,
+              perPageSelect: [5, 10, 15, 20],
+              labels: {
+                placeholder: "Search records...",
+                perPage: "Records per page:",
+                noRows: "No records found",
+                info: "Showing {start} to {end} of {rows} records"
+              }
+            });
+
+            // Refresh icons after table is created
+            refreshIcons();
+
+          } catch (error) {
+            console.error('Failed to initialize database table:', error);
+            const tableBody = document.querySelector('#database-table tbody');
+            tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Error loading records: ' + error.message + '</td></tr>';
           }
         }
 
@@ -984,6 +1081,8 @@ _Coming soon:_ theme, export, and defaults.
           // Small delay to ensure DOM is fully ready
           setTimeout(() => {
             updateUI();
+            // Initialize the database table
+            initializeDatabaseTable();
           }, 50);
         }
 
@@ -1555,6 +1654,8 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
               const success = await clearAllRecords();
               if (success) {
                 await displayRecords();
+                // Also refresh the main database table
+                initializeDatabaseTable();
                 notyf.success('All records have been cleared from the database.');
               } else {
                 notyf.error('Failed to clear records from the database.');
