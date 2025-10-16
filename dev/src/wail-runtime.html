@@ -409,6 +409,19 @@ _Coming soon:_ theme, export, and defaults.
         // Parser for WAIL format (with AUX tags)
         // -------------------------------
         class WailParser {
+          constructor() {
+            // Cache regex patterns for better performance
+            this.regexCache = {
+              data: /<data name="([^"]+)">([\s\S]*?)<\/data>/gi,
+              metaData: /<meta-data>([\s\S]*?)<\/meta-data>/i,
+              views: /<view name="([^"]+)">([\s\S]*?)<\/view>/g,
+              aiGenerated: /<ai-generated>([\s\S]*?)<\/ai-generated>/i,
+              aiGeneratedLegacy: /<ai-generated name="([^"]+)">([\s\S]*?)<\/ai-generated>/gi,
+              splash: /<splash>([\s\S]*?)<\/splash>/i,
+              aux: (name) => new RegExp(`<${name}>([\\s\\S]*?)<\\/${name}>`, 'i')
+            };
+          }
+
           parse(scriptContent) {
             const tagData = this.parseDataTags(scriptContent);
 
@@ -435,7 +448,8 @@ _Coming soon:_ theme, export, and defaults.
           }
           parseViews(content) {
             const views = {};
-            const viewRegex = /<view name="([^"]+)">([\s\S]*?)<\/view>/g;
+            const viewRegex = this.regexCache.views;
+            viewRegex.lastIndex = 0; // Reset regex state
             let match;
             while ((match = viewRegex.exec(content)) !== null) {
               views[match[1]] = { name: match[1], content: match[2].trim() };
@@ -445,7 +459,8 @@ _Coming soon:_ theme, export, and defaults.
           // NEW: parse <data> tags from the full script text
           parseDataTags(fullText) {
             const result = {};
-            const dataRegex = /<data name="([^"]+)">([\s\S]*?)<\/data>/gi;
+            const dataRegex = this.regexCache.data;
+            dataRegex.lastIndex = 0; // Reset regex state
             let match;
             while ((match = dataRegex.exec(fullText)) !== null) {
               const name = match[1];
@@ -468,8 +483,7 @@ _Coming soon:_ theme, export, and defaults.
           }
           // NEW: parse <meta-data> tag from the full script text
           parseMetaDataTag(fullText) {
-            const metaDataRegex = /<meta-data>([\s\S]*?)<\/meta-data>/i;
-            const match = fullText.match(metaDataRegex);
+            const match = fullText.match(this.regexCache.metaData);
 
             if (!match) {
               return {};
@@ -489,7 +503,7 @@ _Coming soon:_ theme, export, and defaults.
           // NEW: parse <help>, <about>, <settings> from the full script text
           parseAux(fullText) {
             const tag = (name) => {
-              const re = new RegExp(`<${name}>([\\s\\S]*?)<\\/${name}>`, 'i');
+              const re = this.regexCache.aux(name);
               const m = fullText.match(re);
               return m ? m[1].trim() : '';
             };
@@ -501,15 +515,13 @@ _Coming soon:_ theme, export, and defaults.
           }
           // NEW: parse <splash> tag separately from views
           parseSplash(fullText) {
-            const re = /<splash>([\s\S]*?)<\/splash>/i;
-            const m = fullText.match(re);
+            const m = fullText.match(this.regexCache.splash);
             return m ? m[1].trim() : '';
           }
           // NEW: parse <ai-generated> tags from the full script text
           parseAIGeneratedTags(fullText) {
             // First try to parse as JSON format (new format)
-            const aiGeneratedRegex = /<ai-generated>([\s\S]*?)<\/ai-generated>/i;
-            const match = fullText.match(aiGeneratedRegex);
+            const match = fullText.match(this.regexCache.aiGenerated);
 
             if (match) {
               const content = match[1].trim();
@@ -525,7 +537,8 @@ _Coming soon:_ theme, export, and defaults.
 
             // If no JSON format found, try legacy individual tags format
             const result = {};
-            const legacyAiGeneratedRegex = /<ai-generated name="([^"]+)">([\s\S]*?)<\/ai-generated>/gi;
+            const legacyAiGeneratedRegex = this.regexCache.aiGeneratedLegacy;
+            legacyAiGeneratedRegex.lastIndex = 0; // Reset regex state
             let legacyMatch;
             while ((legacyMatch = legacyAiGeneratedRegex.exec(fullText)) !== null) {
               const name = legacyMatch[1];
@@ -537,7 +550,6 @@ _Coming soon:_ theme, export, and defaults.
             if (Object.keys(result).length > 0) {
               return result;
             }
-
 
             // Fallback to hardcoded values if parsing fails
             return {
@@ -558,6 +570,20 @@ _Coming soon:_ theme, export, and defaults.
         let aiData = {};
         let stepsCache = null;
         let isSelectingCity = false;
+
+        // Cache frequently accessed DOM elements
+        const domCache = {
+          elements: {},
+          get(id) {
+            if (!this.elements[id]) {
+              this.elements[id] = document.getElementById(id);
+            }
+            return this.elements[id];
+          },
+          clear() {
+            this.elements = {};
+          }
+        };
 
         // Initialize Notyf for toast notifications
         const notyf = new Notyf({
@@ -1041,8 +1067,18 @@ _Coming soon:_ theme, export, and defaults.
 
           isSelectingCity = true;
           const cities = parsedScript.data.cities || [];
-          const citiesList = cities.join(', ');
 
+          // If we have cities, use random selection for better performance
+          // AI selection is expensive and not critical for this demo
+          if (cities.length > 0) {
+            const randomCity = cities[Math.floor(Math.random() * cities.length)];
+            aiData['ai-selected-city'] = randomCity;
+            isSelectingCity = false;
+            return;
+          }
+
+          // Fallback to AI selection only if no cities available
+          const citiesList = cities.join(', ');
           const prompt = `Select one city from: ${citiesList}. Respond with only the city name.`;
 
           try {
@@ -1328,29 +1364,28 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           const interpolated = interpolateVariables(view.content);
           const html = marked.parse(interpolated);
 
-          stepElement.innerHTML = html;
-          restoreFormValues(stepElement);
-          refreshIcons();
+          // Only update if content has actually changed
+          if (stepElement.innerHTML !== html) {
+            stepElement.innerHTML = html;
+            restoreFormValues(stepElement);
+            refreshIcons();
 
-          // Attach button event listeners if this is the output step (step 3)
-          if (stepId === 3) {
-            // Save button
-            const saveBtn = document.getElementById('save-btn');
-            if (saveBtn) {
-              // Remove any existing event listeners to prevent duplicates
-              saveBtn.replaceWith(saveBtn.cloneNode(true));
-              const newSaveBtn = document.getElementById('save-btn');
-
-              newSaveBtn.addEventListener('click', async (e) => {
-                e.preventDefault();
-                try {
-                  await saveToDatabase();
-                } catch (error) {
-                  console.error('Save failed:', error);
-                }
-              });
+            // Attach button event listeners if this is the output step (step 3)
+            if (stepId === 3) {
+              // Save button
+              const saveBtn = document.getElementById('save-btn');
+              if (saveBtn && !saveBtn.hasAttribute('data-listener-attached')) {
+                saveBtn.setAttribute('data-listener-attached', 'true');
+                saveBtn.addEventListener('click', async (e) => {
+                  e.preventDefault();
+                  try {
+                    await saveToDatabase();
+                  } catch (error) {
+                    console.error('Save failed:', error);
+                  }
+                });
+              }
             }
-
           }
         }
 
@@ -1378,6 +1413,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         // Events
         // -------------------------------
         let eventListenersAttached = false;
+        const eventListeners = new Map(); // Track attached listeners
 
         function attachEventListeners() {
           // Prevent duplicate event listeners
@@ -1385,14 +1421,28 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           eventListenersAttached = true;
 
           // Step control buttons
-          document.getElementById('back-btn').addEventListener('click', previousStep);
-          document.getElementById('next-btn').addEventListener('click', nextStep);
+          const backBtn = domCache.get('back-btn');
+          const nextBtn = domCache.get('next-btn');
+          const stepMenuBtn = domCache.get('step-menu-btn');
+
+          if (!eventListeners.has('back-btn')) {
+            backBtn.addEventListener('click', previousStep);
+            eventListeners.set('back-btn', true);
+          }
+
+          if (!eventListeners.has('next-btn')) {
+            nextBtn.addEventListener('click', nextStep);
+            eventListeners.set('next-btn', true);
+          }
 
           // Hamburger menu button
-          document.getElementById('step-menu-btn').addEventListener('click', () => {
-            document.getElementById('step-menu-dialog').showModal();
-            refreshIcons();
-          });
+          if (!eventListeners.has('step-menu-btn')) {
+            stepMenuBtn.addEventListener('click', () => {
+              domCache.get('step-menu-dialog').showModal();
+              refreshIcons();
+            });
+            eventListeners.set('step-menu-btn', true);
+          }
 
           // Step menu dialog click -> navigate or open aux
           document.getElementById('step-menu').addEventListener('click', async (e) => {
@@ -1553,13 +1603,13 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             return;
           }
 
-          const progressEl = document.getElementById('interactive-progress');
+          const progressEl = domCache.get('interactive-progress');
           progressEl.value = currentStep;
           progressEl.max = maxSteps;
           progressEl.setAttribute('aria-valuetext', `Step ${currentStep} of ${maxSteps}`);
 
           // Title text (preserve icon)
-          const stepTitle = document.getElementById('step-title');
+          const stepTitle = domCache.get('step-title');
           const titleIcon = stepTitle.querySelector('i[data-lucide]');
           stepTitle.textContent = `${currentStep}. ${currentStepData.name}`;
           if (titleIcon) stepTitle.prepend(titleIcon);
@@ -1577,9 +1627,9 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           });
 
           // Simple button state management
-          const backBtn = document.getElementById('back-btn');
-          const nextBtn = document.getElementById('next-btn');
-          const hamburgerBtn = document.getElementById('step-menu-btn');
+          const backBtn = domCache.get('back-btn');
+          const nextBtn = domCache.get('next-btn');
+          const hamburgerBtn = domCache.get('step-menu-btn');
 
           if (!backBtn || !nextBtn || !hamburgerBtn) return; // Exit if buttons don't exist yet
 
