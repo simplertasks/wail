@@ -569,7 +569,7 @@ _Coming soon:_ theme, export, and defaults.
         let formData = {};
         let aiData = {};
         let stepsCache = null;
-        let isSelectingCity = false;
+        let aiDataCache = {}; // Smart caching for AI responses
 
         // Cache frequently accessed DOM elements
         const domCache = {
@@ -902,6 +902,8 @@ _Coming soon:_ theme, export, and defaults.
             const t = e.target;
             if (t && t.name) {
               formData[t.name] = t.value;
+              // Clear cache when form data changes
+              aiDataCache = {};
             }
           });
 
@@ -931,10 +933,7 @@ _Coming soon:_ theme, export, and defaults.
           try {
             const validation = await validateAPIKey(apiKey.trim());
             if (validation.valid) {
-              notyf.success('API key is valid! Starting the quiz...');
-
-              // Generate city selection for display
-              await generateDisplayAIData();
+              notyf.success('API key is valid! Starting the app...');
 
               // Transition to main app
               setTimeout(() => {
@@ -1031,6 +1030,13 @@ _Coming soon:_ theme, export, and defaults.
         }
 
 
+        // Generate cache key based on form data and current step
+        function getCacheKey() {
+          const formDataStr = JSON.stringify(formData);
+          const stepStr = String(currentStep);
+          return `${formDataStr}-${stepStr}`;
+        }
+
         // AI generation - requires valid API key
         async function generateAIData() {
           const apiKey = formData['groq-api-key'];
@@ -1040,91 +1046,36 @@ _Coming soon:_ theme, export, and defaults.
             throw new Error(validation.error);
           }
 
-          // Use Groq API
-          await generateWithGroqAPI(apiKey);
-        }
-
-        // Generate AI data for display purposes (like city selection)
-        async function generateDisplayAIData() {
-          const apiKey = formData['groq-api-key'];
-
-          // Only generate if we have an API key and need display data
-          if (apiKey && apiKey.trim()) {
-            try {
-              // Skip validation since we already know the API key is valid
-              // Generate only the ai-selected-city for display
-              await generateCitySelection(apiKey);
-            } catch (error) {
-            }
-          }
-        }
-
-        // Generate city selection for display
-        async function generateCitySelection(apiKey) {
-          if (aiData['ai-selected-city'] || isSelectingCity) {
-            return; // Already selected or in progress
-          }
-
-          isSelectingCity = true;
-          const cities = parsedScript.data.cities || [];
-
-          // If we have cities, use random selection for better performance
-          // AI selection is expensive and not critical for this demo
-          if (cities.length > 0) {
-            const randomCity = cities[Math.floor(Math.random() * cities.length)];
-            aiData['ai-selected-city'] = randomCity;
-            isSelectingCity = false;
+          // Check cache first
+          const cacheKey = getCacheKey();
+          if (aiDataCache[cacheKey]) {
+            aiData = { ...aiDataCache[cacheKey] };
             return;
           }
 
-          // Fallback to AI selection only if no cities available
-          const citiesList = cities.join(', ');
-          const prompt = `Select one city from: ${citiesList}. Respond with only the city name.`;
+          // Use Groq API
+          await generateWithGroqAPI(apiKey);
 
-          try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'llama-3.1-8b-instant',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.8,
-                max_tokens: 20
-              })
-            });
+          // Cache the result
+          aiDataCache[cacheKey] = { ...aiData };
+        }
 
-            if (response.ok) {
-              const data = await response.json();
-              const selectedCity = data.choices[0].message.content.trim();
 
-              // Verify the selected city is in our list
-              if (cities.includes(selectedCity)) {
-                aiData['ai-selected-city'] = selectedCity;
-              } else {
-                // Fallback to random selection if AI response is invalid
-                const randomCity = cities[Math.floor(Math.random() * cities.length)];
-                aiData['ai-selected-city'] = randomCity;
-              }
-            } else {
-              // If API call fails, use random selection
-              const randomCity = cities[Math.floor(Math.random() * cities.length)];
-              aiData['ai-selected-city'] = randomCity;
+        // Extract dependencies from AI instructions
+        function extractDependencies(instructions) {
+          const dependencies = new Set();
+          Object.values(instructions).forEach(instruction => {
+            const matches = instruction.match(/\{([^}]+)\}/g);
+            if (matches) {
+              matches.forEach(match => dependencies.add(match.slice(1, -1)));
             }
-          } catch (error) {
-            // If all else fails, use random selection
-            const randomCity = cities[Math.floor(Math.random() * cities.length)];
-            aiData['ai-selected-city'] = randomCity;
-          } finally {
-            isSelectingCity = false;
-          }
+          });
+          return Array.from(dependencies);
         }
 
         // Groq API implementation
         async function generateWithGroqAPI(apiKey) {
-          // Get all AI variables that need to be generated (excluding those already set)
+          // Get all AI variables that need to be generated
           const aiVariables = Object.keys(parsedScript.aiGenerated || {});
           const variablesToGenerate = aiVariables.filter(key => !aiData[key]);
 
@@ -1138,19 +1089,26 @@ _Coming soon:_ theme, export, and defaults.
             return `- ${key}: ${instruction}`;
           }).join('\n');
 
-          // Get context variables for the prompt
-          const city = aiData['ai-selected-city'];
-          const userFacts = formData['city-facts'] || '';
+          // Extract dependencies and build context
+          const dependencies = extractDependencies(parsedScript.aiGenerated);
+          const dependencyText = dependencies.length > 0
+            ? `Available variables: ${dependencies.join(', ')}`
+            : 'No variables available';
 
-          // Prepare the dynamic prompt
-          const evaluationPrompt = `You are an expert geography teacher. Evaluate the following facts about ${city} provided by a student:
+          // Prepare the completely generic prompt
+          const evaluationPrompt = `You are a helpful AI assistant.
 
-Student's facts: "${userFacts}"
+CRITICAL RULE: If any variable in curly braces {like-this} is missing, empty, or unavailable, you MUST respond with an empty string "" for that field. Do NOT provide explanations, error messages, or placeholder text.
+
+${dependencyText}
 
 Please provide the following information:
 ${promptInstructions}
 
-IMPORTANT: For the ai-grade field, respond with ONLY a single letter: A, B, C, D, or F. Do not include any explanation or additional text.
+Examples of correct responses:
+- If {user-input} is missing → respond with "" for that field
+- If {data} is empty → respond with "" for that field
+- Do NOT write "Incomplete data" or "Cannot evaluate" - just use ""
 
 Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
 
@@ -1248,13 +1206,33 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
                   // Handle strings, numbers, etc.
                   let processedValue = String(value);
 
+                  // Check if AI returned explanatory text instead of empty string for missing data
+                  const missingDataPatterns = [
+                    /incomplete data/i,
+                    /cannot evaluate/i,
+                    /no data/i,
+                    /missing/i,
+                    /unavailable/i,
+                    /not provided/i,
+                    /insufficient/i,
+                    /unknown/i,
+                    /n\/a/i,
+                    /not available/i,
+                    /cannot determine/i,
+                    /unable to/i
+                  ];
+
+                  if (missingDataPatterns.some(pattern => pattern.test(processedValue))) {
+                    processedValue = '';
+                  }
+
                   // Special processing for ai-grade: extract only the letter grade
                   if (key === 'ai-grade') {
                     const gradeMatch = processedValue.match(/[ABCDEF]/i);
                     if (gradeMatch) {
                       processedValue = gradeMatch[0].toUpperCase();
                     } else {
-                      processedValue = 'N/A';
+                      processedValue = '';
                     }
                   }
 
@@ -1302,7 +1280,9 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           // AI-generated variables
           for (const [key, value] of Object.entries(aiData)) {
             if (value !== undefined && value !== null) {
-              result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), String(value));
+              // Handle empty strings by replacing with nothing (not even a space)
+              const displayValue = value === '' ? '' : String(value);
+              result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), displayValue);
             }
           }
 
@@ -1475,17 +1455,16 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             const t = e.target;
             if (t && t.name) {
               formData[t.name] = t.value;
-              // Update UI to enable/disable buttons based on API key presence
-              if (currentStep === 1) {
-                updateUI();
-              }
+              // Clear cache when form data changes to ensure fresh AI generation
+              aiDataCache = {};
             }
           });
           document.addEventListener('change', (e) => {
             const t = e.target;
             if (t && t.name) {
               formData[t.name] = t.value;
-              // Note: API key validation is handled by the input event, not change event
+              // Clear cache when form data changes to ensure fresh AI generation
+              aiDataCache = {};
             }
           });
 
@@ -1534,36 +1513,18 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           if (stepId >= 1 && stepId <= steps.length) {
             currentStep = stepId;
 
-            // Generate city selection when moving to step 2 (input step)
-            if (stepId === 2) {
-              try {
-                // Ensure city is selected for step 2
-                await generateDisplayAIData();
-                // Update step 2 content to show the selected city
-                updateStepContent(2);
-              } catch (error) {
-                // Continue anyway, the placeholder will show
-              }
-            }
-
-            // Generate AI data when moving to output step (step 3)
-            // This ensures the API key and user facts are available
-            if (stepId === 3) {
-              try {
-                await generateAIData();
-
-                // After AI generation, update only the output step content
-                updateStepContent(3);
-                // Refresh icons for any new elements
-                refreshIcons();
-              } catch (error) {
-                console.error('AI Generation failed:', error);
-                // Show error message to user
-                notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
-                // Stay on current step instead of proceeding
-                currentStep = 2;
-                return;
-              }
+            // Always generate AI data when navigating to any step
+            // This ensures fresh data if user went back and changed input
+            try {
+              await generateAIData();
+              // Update the current step content with fresh AI data
+              updateStepContent(stepId);
+              // Refresh icons for any new elements
+              refreshIcons();
+            } catch (error) {
+              console.error('AI Generation failed:', error);
+              // Show error message to user but don't block navigation
+              notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
             }
 
             // Always update UI to show/hide the correct step
@@ -1580,11 +1541,6 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
         }
 
         async function nextStep() {
-          // Prevent navigation if city selection is in progress
-          if (isSelectingCity) {
-            return;
-          }
-
           const steps = getSteps();
           if (currentStep < steps.length) await goToStep(currentStep + 1);
         }
@@ -1636,18 +1592,14 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           // Back button: disabled on step 1, enabled on other steps
           backBtn.disabled = currentStep === 1;
 
-          // Next button: disabled on last step or when selecting city
-          nextBtn.disabled = currentStep === maxSteps || isSelectingCity;
+          // Next button: disabled on last step
+          nextBtn.disabled = currentStep === maxSteps;
 
           // Hamburger menu: always enabled (API key is validated before entering main app)
           hamburgerBtn.disabled = false;
 
-          // Update Next button text when city selection is in progress
-          if (isSelectingCity && currentStep === 1) {
-            nextBtn.innerHTML = 'Selecting city... <i data-lucide="loader-2"></i>';
-          } else {
-            nextBtn.innerHTML = 'Next <i data-lucide="arrow-right"></i>';
-          }
+          // Update Next button text
+          nextBtn.innerHTML = 'Next <i data-lucide="arrow-right"></i>';
 
           // Ensure icons are refreshed after DOM updates
           refreshIcons();
