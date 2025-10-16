@@ -269,7 +269,7 @@
 <ai-generated>
 {
   "ai-selected-city": "randomly select one city from {cities}",
-  "ai-evaluation": "provide a detailed evaluation of {city-facts} for accuracy and completeness. Be specific about what the user got right, wrong, or missed. Give concrete examples and explanations.",
+  "ai-evaluation": "provide a detailed evaluation of {city-facts} for accuracy and completeness regarding {ai-selected-city}. Be specific about what the user got right, wrong, or missed. Give concrete examples and explanations.",
   "ai-grade": "assign only a single letter grade A, B, C, D, or F",
   "ai-funfact": "generate interesting fact about {ai-selected-city}"
 }
@@ -305,7 +305,7 @@ Welcome to the Cities Quiz! Let's get started.
 </form>
 </view>
 
-<view name="output">
+<view name="output" type="submit">
 **Hello {user-name}!**
 
 You were asked about **{ai-selected-city}** and you replied:
@@ -321,14 +321,9 @@ You were asked about **{ai-selected-city}** and you replied:
 ## Fun Fact
 
 *{ai-funfact}*
-
-<button type="button" id="save-btn" class="secondary" style="margin-top: 1rem; width: auto; display: block; margin-left: auto; margin-right: auto;">
-  <i data-lucide="save"></i>
-  Save Results
-</button>
 </view>
 
-<view name="goodbye">
+<view name="goodbye" type="submit">
 ## Thanks for playing {title}!
 
 By the way, the other cities were:
@@ -414,7 +409,7 @@ _Coming soon:_ theme, export, and defaults.
             this.regexCache = {
               data: /<data name="([^"]+)">([\s\S]*?)<\/data>/gi,
               metaData: /<meta-data>([\s\S]*?)<\/meta-data>/i,
-              views: /<view name="([^"]+)">([\s\S]*?)<\/view>/g,
+              views: /<view name="([^"]+)"(?:\s+[^>]*)?>([\s\S]*?)<\/view>/g,
               aiGenerated: /<ai-generated>([\s\S]*?)<\/ai-generated>/i,
               aiGeneratedLegacy: /<ai-generated name="([^"]+)">([\s\S]*?)<\/ai-generated>/gi,
               splash: /<splash>([\s\S]*?)<\/splash>/i,
@@ -452,7 +447,18 @@ _Coming soon:_ theme, export, and defaults.
             viewRegex.lastIndex = 0; // Reset regex state
             let match;
             while ((match = viewRegex.exec(content)) !== null) {
-              views[match[1]] = { name: match[1], content: match[2].trim() };
+              const viewName = match[1];
+              const viewContent = match[2].trim();
+
+              // Extract type attribute from the opening tag
+              const typeMatch = content.match(new RegExp(`<view\\s+name="${viewName}"(?:\\s+type="([^"]+)")?`, 'i'));
+              const viewType = typeMatch ? typeMatch[1] : null;
+
+              views[viewName] = {
+                name: viewName,
+                content: viewContent,
+                type: viewType
+              };
             }
             return views;
           }
@@ -1348,7 +1354,21 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             const view = parsedScript.views[step.viewName];
             const interpolated = interpolateVariables(view.content);
             const html = marked.parse(interpolated);
-            return `<div id="step-${step.id}" class="step-content" data-step="${step.id}">${html}</div>`;
+
+            // Add submit button if view has type="submit"
+            let submitButton = '';
+            if (view.type === 'submit') {
+              submitButton = `
+                <div style="margin-top: 1rem; text-align: center;">
+                  <button type="button" class="submit-btn" data-step="${step.id}" style="width: auto; display: inline-block;">
+                    <i data-lucide="save"></i>
+                    Save Results
+                  </button>
+                </div>
+              `;
+            }
+
+            return `<div id="step-${step.id}" class="step-content" data-step="${step.id}">${html}${submitButton}</div>`;
           }).join('');
 
           restoreFormValues(mainContent);
@@ -1368,19 +1388,33 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           const interpolated = interpolateVariables(view.content);
           const html = marked.parse(interpolated);
 
+          // Add submit button if view has type="submit"
+          let submitButton = '';
+          if (view.type === 'submit') {
+            submitButton = `
+              <div style="margin-top: 1rem; text-align: center;">
+                <button type="button" class="submit-btn" data-step="${stepId}" style="width: auto; display: inline-block;">
+                  <i data-lucide="save"></i>
+                  Save Results
+                </button>
+              </div>
+            `;
+          }
+
+          const fullContent = html + submitButton;
+
           // Only update if content has actually changed
-          if (stepElement.innerHTML !== html) {
-            stepElement.innerHTML = html;
+          if (stepElement.innerHTML !== fullContent) {
+            stepElement.innerHTML = fullContent;
             restoreFormValues(stepElement);
             refreshIcons();
 
-            // Attach button event listeners if this is the output step (step 3)
-            if (stepId === 3) {
-              // Save button
-              const saveBtn = document.getElementById('save-btn');
-              if (saveBtn && !saveBtn.hasAttribute('data-listener-attached')) {
-                saveBtn.setAttribute('data-listener-attached', 'true');
-                saveBtn.addEventListener('click', async (e) => {
+            // Attach submit button event listeners for views with type="submit"
+            if (view.type === 'submit') {
+              const submitBtn = stepElement.querySelector('.submit-btn');
+              if (submitBtn && !submitBtn.hasAttribute('data-listener-attached')) {
+                submitBtn.setAttribute('data-listener-attached', 'true');
+                submitBtn.addEventListener('click', async (e) => {
                   e.preventDefault();
                   try {
                     await saveToDatabase();
@@ -1504,7 +1538,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           document.getElementById('aux-dialog').addEventListener('cancel', (e) => { e.preventDefault(); closeAux(); });
 
 
-          // Save button event listener will be attached dynamically when the output view is rendered
+          // Submit button event listeners are attached dynamically when views with type="submit" are rendered
 
           // Database dialog event listeners
           document.getElementById('db-close').addEventListener('click', closeDatabaseDialog);
