@@ -705,61 +705,53 @@ _Coming soon:_ theme, export, and defaults.
             console.log('initializeDatabaseTable called');
             const records = await getAllRecords();
             console.log('Retrieved records:', records.length);
-            const tableBody = document.querySelector('#database-table tbody');
 
             if (records.length === 0) {
-              tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; font-style: italic;">No records found in the database.</td></tr>';
               // If no records, destroy existing table if it exists
               if (dataTable) {
                 dataTable.destroy();
                 dataTable = null;
               }
+              const tableBody = document.querySelector('#database-table tbody');
+              tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; font-style: italic;">No records found in the database.</td></tr>';
               return;
             }
 
-            // Clear existing content
-            tableBody.innerHTML = '';
-
-            // Populate table with records
-            records.forEach(record => {
+            // Prepare data for Simple-DataTables
+            const tableData = records.map(record => {
               const createdDate = new Date(record.created).toLocaleString();
               const userName = record.data?.formData?.['user-name'] || 'N/A';
               const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
               const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
 
-              const row = document.createElement('tr');
-              row.innerHTML = `
-                <td>${record.id}</td>
-                <td>${createdDate}</td>
-                <td>${userName}</td>
-                <td>${city}</td>
-                <td>${grade}</td>
-                <td>
-                  <button class="secondary" onclick="viewRecordDetails(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                    <i data-lucide="eye"></i>
-                    View
-                  </button>
-                </td>
-              `;
-              tableBody.appendChild(row);
+              return [
+                record.id,
+                createdDate,
+                userName,
+                city,
+                grade,
+                `<button class="secondary" onclick="viewRecordDetails(${record.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                  <i data-lucide="eye"></i>
+                  View
+                </button>`
+              ];
             });
 
-            // Initialize or refresh Simple-DataTables
+            // Initialize or update Simple-DataTables
             if (dataTable) {
-              console.log('Refreshing existing DataTable');
-              try {
-                dataTable.refresh();
-                console.log('DataTable refreshed successfully');
-              } catch (error) {
-                console.log('Refresh failed, recreating DataTable:', error);
-                dataTable.destroy();
-                dataTable = null;
-                // Fall through to create new one
-              }
+              console.log('Updating existing DataTable with new data');
+              // Clear existing data and insert all records
+              dataTable.destroy();
+              dataTable = null;
             }
 
             if (!dataTable) {
               console.log('Creating new DataTable with', records.length, 'records');
+
+              // Clear the table body first
+              const tableBody = document.querySelector('#database-table tbody');
+              tableBody.innerHTML = '';
+
               dataTable = new simpleDatatables.DataTable("#database-table", {
                 searchable: true,
                 sortable: true,
@@ -774,23 +766,13 @@ _Coming soon:_ theme, export, and defaults.
                 }
               });
 
-              // Add event listeners for DataTable events
-              dataTable.on('datatable.refresh:before', () => {
-                console.log('DataTable refresh starting...');
-              });
+              // Insert all the data
+              dataTable.insert({ data: tableData });
 
-              dataTable.on('datatable.refresh', () => {
-                console.log('DataTable refresh completed!');
-                // Refresh icons after refresh is complete
-                setTimeout(() => {
-                  refreshIcons();
-                }, 100);
-              });
-
-              console.log('New DataTable created successfully');
+              console.log('DataTable created and populated successfully');
             }
 
-            // Refresh icons after table is created/refreshed
+            // Refresh icons after table is created
             refreshIcons();
 
             // Ensure the details element is open when new data is added
