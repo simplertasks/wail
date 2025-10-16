@@ -1206,8 +1206,6 @@ _Coming soon:_ theme, export, and defaults.
           // Initialize database with app data
           initializeDatabase(parsedScript);
 
-          // AI will handle city selection when needed
-
           renderWizard();
           renderStepMenu();
           attachEventListeners();
@@ -1216,8 +1214,20 @@ _Coming soon:_ theme, export, and defaults.
 
           // Update UI after everything is rendered and event listeners are attached
           // Small delay to ensure DOM is fully ready
-          setTimeout(() => {
+          setTimeout(async () => {
             updateUI();
+
+            // Generate any AI variables needed for the current step
+            try {
+              await generateAIData();
+              // Update the current step content with fresh AI data
+              updateStepContent(currentStep);
+              refreshIcons();
+            } catch (error) {
+              console.error('AI Generation failed on init:', error);
+              // Don't show error on init, just log it
+            }
+
             // Initialize quiz results table
             initializeQuizResultsTable();
 
@@ -1290,10 +1300,29 @@ _Coming soon:_ theme, export, and defaults.
           return `${formDataStr}-${stepStr}`;
         }
 
-        // AI generation - requires valid API key
+        // AI generation - handles both API and non-API generated variables
         async function generateAIData() {
+          // First, handle any non-API variables that can be generated immediately
+          const nonApiVariables = ['ai-selected-city']; // Add other non-API variables here
+
+          for (const varName of nonApiVariables) {
+            if (parsedScript.aiGenerated[varName] && !aiData[varName]) {
+              if (varName === 'ai-selected-city') {
+                generateCitySelection();
+              }
+              // Add other non-API variable generators here
+            }
+          }
+
+          // Check if we need to generate any API-required variables
           const apiKey = formData['groq-api-key'];
-          // Validate API key first
+          const variablesToGenerate = Object.keys(parsedScript.aiGenerated || {}).filter(key => !aiData[key]);
+
+          if (variablesToGenerate.length === 0) {
+            return; // All variables already generated
+          }
+
+          // Validate API key for remaining variables
           const validation = await validateAPIKey(apiKey);
           if (!validation.valid) {
             throw new Error(validation.error);
@@ -1306,7 +1335,7 @@ _Coming soon:_ theme, export, and defaults.
             return;
           }
 
-          // Use Groq API
+          // Use Groq API for remaining variables
           await generateWithGroqAPI(apiKey);
 
           // Cache the result
@@ -1337,8 +1366,22 @@ _Coming soon:_ theme, export, and defaults.
           });
         }
 
-        // Generate city selection first
-        async function generateCitySelection(apiKey) {
+        // Check if a view contains AI-generated variables that require user input
+        function viewContainsUserDependentAIVariables(viewContent) {
+          if (!parsedScript.aiGenerated) return false;
+
+          // These variables depend on user input and should only be generated when user has provided input
+          const userDependentVars = ['ai-evaluation', 'ai-grade', 'ai-funfact'];
+
+          return userDependentVars.some(varName => {
+            if (!parsedScript.aiGenerated[varName]) return false;
+            const regex = new RegExp(`\\{${varName}\\}`, 'g');
+            return regex.test(viewContent);
+          });
+        }
+
+        // Generate city selection first (no API key needed for random selection)
+        function generateCitySelection() {
           const cities = parsedScript.data.cities;
           if (!cities || cities.length === 0) return;
 
@@ -1362,7 +1405,7 @@ _Coming soon:_ theme, export, and defaults.
           // This is a simplified approach - generate city selection first if needed
           if (variablesToGenerate.includes('ai-selected-city') && !aiData['ai-selected-city']) {
             // Generate city selection first
-            await generateCitySelection(apiKey);
+            generateCitySelection();
           }
 
           // Build dynamic prompt based on AI-GENERATED section
@@ -1426,31 +1469,21 @@ _Coming soon:_ theme, export, and defaults.
             .map(([key, value]) => `${key}: "${value}"`)
             .join('\n');
 
-          // Prepare the completely generic prompt
-          const evaluationPrompt = `You are a helpful AI assistant.
+          // Much simpler, direct prompt
+          const selectedCity = aiData['ai-selected-city'] || 'Not selected';
+          const userFacts = formData['city-facts'] || 'No facts provided';
 
-CRITICAL RULE: Only return an empty string "" if a variable in curly braces {like-this} is completely missing, null, or literally empty. If the variable contains ANY content (even if brief), you should provide a proper response.
+          const evaluationPrompt = `You are evaluating a quiz response about cities.
 
-CURRENT FORM DATA:
-${formDataContext || 'No form data available'}
+The user was asked to provide 3 facts about ${selectedCity} and wrote: "${userFacts}"
 
-CURRENT AI DATA:
-${aiDataContext || 'No AI data available'}
+Please evaluate these facts for accuracy and provide:
 
-${dependencyText}
+1. ai-evaluation: A brief assessment of how accurate these facts are
+2. ai-grade: A single letter grade (A, B, C, D, or F) based on accuracy
+3. ai-funfact: One interesting fact about ${selectedCity}
 
-Please provide the following information:
-${promptInstructions}
-
-IMPORTANT: When evaluating user responses, read the ACTUAL text the user provided. Do not make assumptions or evaluate different text than what was given.
-
-Examples:
-- If {user-input} is missing/null/empty → respond with "" for that field
-- If {user-input} contains "Tokyo is a big city" → provide a specific evaluation of this statement
-- If {data} is empty string → respond with "" for that field  
-- If {data} contains any text → provide a proper response
-
-Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
+Return a JSON object with these exact keys: "ai-evaluation", "ai-grade", "ai-funfact". Each value should be a single string.`;
 
           console.log('=== COMPREHENSIVE AI DEBUG LOG ===');
           console.log('1. Form data being sent to AI:', formData);
@@ -1462,6 +1495,7 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           console.log('7. Dependencies:', dependencies);
           console.log('8. Dependency text:', dependencyText);
           console.log('9. Final prompt being sent to AI:', evaluationPrompt);
+          console.log('10. Raw AI generated instructions:', parsedScript.aiGenerated);
           console.log('10. Current aiData after city selection:', aiData);
           console.log('11. Parsed script metadata:', parsedScript.metadata);
           console.log('12. Parsed script data:', parsedScript.data);
@@ -1915,20 +1949,46 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
             const viewContent = parsedScript.views[currentStepData.viewName].content;
 
             if (viewContainsAIVariables(viewContent)) {
-              // Only generate AI data if the view actually contains AI variables
-              try {
+              // Check if this view contains user-dependent AI variables
+              const hasUserDependentVars = viewContainsUserDependentAIVariables(viewContent);
+
+              if (hasUserDependentVars) {
                 // Ensure we have the latest form data before generating AI
                 captureCurrentFormData();
                 console.log('Form data before AI generation:', formData);
-                await generateAIData();
-                // Update the current step content with fresh AI data
-                updateStepContent(stepId);
-                // Refresh icons for any new elements
-                refreshIcons();
-              } catch (error) {
-                console.error('AI Generation failed:', error);
-                // Show error message to user but don't block navigation
-                notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
+
+                // Check if user has provided the required input
+                const hasUserInput = formData['city-facts'] && formData['city-facts'].trim().length > 0;
+
+                if (!hasUserInput) {
+                  console.log('User has not provided input yet, skipping user-dependent AI generation');
+                  // Just update content without AI generation
+                  updateStepContent(stepId);
+                  refreshIcons();
+                } else {
+                  // User has provided input, generate AI data
+                  try {
+                    await generateAIData();
+                    // Update the current step content with fresh AI data
+                    updateStepContent(stepId);
+                    // Refresh icons for any new elements
+                    refreshIcons();
+                  } catch (error) {
+                    console.error('AI Generation failed:', error);
+                    // Show error message to user but don't block navigation
+                    notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
+                  }
+                }
+              } else {
+                // Non-user-dependent AI variables (like city selection)
+                try {
+                  await generateAIData();
+                  updateStepContent(stepId);
+                  refreshIcons();
+                } catch (error) {
+                  console.error('AI Generation failed:', error);
+                  notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
+                }
               }
             } else {
               // No AI variables in this view, just update the content normally
