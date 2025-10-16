@@ -200,24 +200,28 @@
 
       <!-- Database Table Section -->
       <div class="container" id="database-table-section" style="margin-top: 2rem;">
-        <h3><i data-lucide="database"></i> Database Records</h3>
-        <div id="database-table-container">
-          <table id="database-table" class="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Created</th>
-                <th>User Name</th>
-                <th>City</th>
-                <th>Grade</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Data will be populated by JavaScript -->
-            </tbody>
-          </table>
-        </div>
+        <details>
+          <summary style="cursor: pointer; font-size: 1.2rem; font-weight: bold; padding: 0.5rem 0;">
+            <i data-lucide="database"></i> Database Records
+          </summary>
+          <div id="database-table-container" style="margin-top: 1rem;">
+            <table id="database-table" class="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Created</th>
+                  <th>User Name</th>
+                  <th>City</th>
+                  <th>Grade</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
 
 
@@ -295,7 +299,7 @@
 <ai-generated>
 {
   "ai-selected-city": "randomly select one city from {cities}",
-  "ai-evaluation": "provide a detailed evaluation of {city-facts} for accuracy and completeness regarding {ai-selected-city}. Be specific about what the user got right, wrong, or missed. Give concrete examples and explanations.",
+  "ai-evaluation": "Evaluate the user's response about {ai-selected-city}. The user wrote: '{city-facts}'. Provide a detailed evaluation of this specific text for accuracy and completeness. Be specific about what the user got right, wrong, or missed. Give concrete examples and explanations based on the actual text the user provided.",
   "ai-grade": "assign only a single letter grade A, B, C, D, or F",
   "ai-funfact": "generate interesting fact about {ai-selected-city}"
 }
@@ -662,6 +666,7 @@ _Coming soon:_ theme, export, and defaults.
             notyf.success(`Record saved successfully! ID: ${id}`);
 
             // Refresh the database table
+            console.log('Refreshing database table after save...');
             initializeDatabaseTable();
 
             return id;
@@ -697,11 +702,18 @@ _Coming soon:_ theme, export, and defaults.
         // Function to initialize and populate the main database table
         async function initializeDatabaseTable() {
           try {
+            console.log('initializeDatabaseTable called');
             const records = await getAllRecords();
+            console.log('Retrieved records:', records.length);
             const tableBody = document.querySelector('#database-table tbody');
 
             if (records.length === 0) {
               tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; font-style: italic;">No records found in the database.</td></tr>';
+              // If no records, destroy existing table if it exists
+              if (dataTable) {
+                dataTable.destroy();
+                dataTable = null;
+              }
               return;
             }
 
@@ -734,25 +746,58 @@ _Coming soon:_ theme, export, and defaults.
 
             // Initialize or refresh Simple-DataTables
             if (dataTable) {
-              dataTable.destroy();
+              console.log('Refreshing existing DataTable');
+              try {
+                dataTable.refresh();
+                console.log('DataTable refreshed successfully');
+              } catch (error) {
+                console.log('Refresh failed, recreating DataTable:', error);
+                dataTable.destroy();
+                dataTable = null;
+                // Fall through to create new one
+              }
             }
 
-            dataTable = new simpleDatatables.DataTable("#database-table", {
-              searchable: true,
-              sortable: true,
-              paging: true,
-              perPage: 10,
-              perPageSelect: [5, 10, 15, 20],
-              labels: {
-                placeholder: "Search records...",
-                perPage: "Records per page:",
-                noRows: "No records found",
-                info: "Showing {start} to {end} of {rows} records"
-              }
-            });
+            if (!dataTable) {
+              console.log('Creating new DataTable with', records.length, 'records');
+              dataTable = new simpleDatatables.DataTable("#database-table", {
+                searchable: true,
+                sortable: true,
+                paging: true,
+                perPage: 10,
+                perPageSelect: [5, 10, 15, 20],
+                labels: {
+                  placeholder: "Search records...",
+                  perPage: "Records per page:",
+                  noRows: "No records found",
+                  info: "Showing {start} to {end} of {rows} records"
+                }
+              });
 
-            // Refresh icons after table is created
+              // Add event listeners for DataTable events
+              dataTable.on('datatable.refresh:before', () => {
+                console.log('DataTable refresh starting...');
+              });
+
+              dataTable.on('datatable.refresh', () => {
+                console.log('DataTable refresh completed!');
+                // Refresh icons after refresh is complete
+                setTimeout(() => {
+                  refreshIcons();
+                }, 100);
+              });
+
+              console.log('New DataTable created successfully');
+            }
+
+            // Refresh icons after table is created/refreshed
             refreshIcons();
+
+            // Ensure the details element is open when new data is added
+            const detailsElement = document.querySelector('#database-table-section details');
+            if (detailsElement && records.length > 0) {
+              detailsElement.open = true;
+            }
 
           } catch (error) {
             console.error('Failed to initialize database table:', error);
@@ -1083,6 +1128,17 @@ _Coming soon:_ theme, export, and defaults.
             updateUI();
             // Initialize the database table
             initializeDatabaseTable();
+
+            // Add event listener for details element toggle to refresh icons
+            const detailsElement = document.querySelector('#database-table-section details');
+            if (detailsElement) {
+              detailsElement.addEventListener('toggle', () => {
+                // Small delay to ensure the content is rendered before refreshing icons
+                setTimeout(() => {
+                  refreshIcons();
+                }, 10);
+              });
+            }
           }, 50);
         }
 
@@ -1205,6 +1261,10 @@ _Coming soon:_ theme, export, and defaults.
             return `- ${key}: ${instruction}`;
           }).join('\n');
 
+          // Debug: Log the actual form data being sent
+          console.log('Form data being sent to AI:', formData);
+          console.log('AI data being sent to AI:', aiData);
+
           // Extract dependencies and build context
           const dependencies = extractDependencies(parsedScript.aiGenerated);
           const dependencyText = dependencies.length > 0
@@ -1220,6 +1280,8 @@ ${dependencyText}
 
 Please provide the following information:
 ${promptInstructions}
+
+IMPORTANT: When evaluating user responses, read the ACTUAL text the user provided. Do not make assumptions or evaluate different text than what was given.
 
 Examples:
 - If {user-input} is missing/null/empty → respond with "" for that field
