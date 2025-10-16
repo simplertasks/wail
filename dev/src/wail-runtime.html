@@ -269,7 +269,7 @@
 <ai-generated>
 {
   "ai-selected-city": "randomly select one city from {cities}",
-  "ai-evaluation": "evaluate {city-facts} for accuracy and completeness",
+  "ai-evaluation": "provide a detailed evaluation of {city-facts} for accuracy and completeness. Be specific about what the user got right, wrong, or missed. Give concrete examples and explanations.",
   "ai-grade": "assign only a single letter grade A, B, C, D, or F",
   "ai-funfact": "generate interesting fact about {ai-selected-city}"
 }
@@ -1118,7 +1118,7 @@ ${promptInstructions}
 
 Examples:
 - If {user-input} is missing/null/empty → respond with "" for that field
-- If {user-input} contains "Tokyo is a big city" → provide a proper evaluation
+- If {user-input} contains "Tokyo is a big city" → provide a specific evaluation of this statement
 - If {data} is empty string → respond with "" for that field  
 - If {data} contains any text → provide a proper response
 
