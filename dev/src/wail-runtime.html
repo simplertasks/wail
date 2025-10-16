@@ -1073,6 +1073,17 @@ _Coming soon:_ theme, export, and defaults.
           return Array.from(dependencies);
         }
 
+        // Check if a view contains AI-generated variables
+        function viewContainsAIVariables(viewContent) {
+          if (!parsedScript.aiGenerated) return false;
+
+          const aiVariableNames = Object.keys(parsedScript.aiGenerated);
+          return aiVariableNames.some(varName => {
+            const regex = new RegExp(`\\{${varName}\\}`, 'g');
+            return regex.test(viewContent);
+          });
+        }
+
         // Groq API implementation
         async function generateWithGroqAPI(apiKey) {
           // Get all AI variables that need to be generated
@@ -1098,17 +1109,18 @@ _Coming soon:_ theme, export, and defaults.
           // Prepare the completely generic prompt
           const evaluationPrompt = `You are a helpful AI assistant.
 
-CRITICAL RULE: If any variable in curly braces {like-this} is missing, empty, or unavailable, you MUST respond with an empty string "" for that field. Do NOT provide explanations, error messages, or placeholder text.
+CRITICAL RULE: Only return an empty string "" if a variable in curly braces {like-this} is completely missing, null, or literally empty. If the variable contains ANY content (even if brief), you should provide a proper response.
 
 ${dependencyText}
 
 Please provide the following information:
 ${promptInstructions}
 
-Examples of correct responses:
-- If {user-input} is missing → respond with "" for that field
-- If {data} is empty → respond with "" for that field
-- Do NOT write "Incomplete data" or "Cannot evaluate" - just use ""
+Examples:
+- If {user-input} is missing/null/empty → respond with "" for that field
+- If {user-input} contains "Tokyo is a big city" → provide a proper evaluation
+- If {data} is empty string → respond with "" for that field  
+- If {data} contains any text → provide a proper response
 
 Respond with a JSON object containing these exact keys: ${variablesToGenerate.map(key => `"${key}"`).join(', ')}. Each value should be a single string.`;
 
@@ -1226,6 +1238,12 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
                     processedValue = '';
                   }
 
+                  // Clean up any invisible characters, zero-width spaces, or non-breaking spaces
+                  processedValue = processedValue
+                    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+                    .replace(/\u00A0/g, ' ') // Replace non-breaking spaces with regular spaces
+                    .trim();
+
                   // Special processing for ai-grade: extract only the letter grade
                   if (key === 'ai-grade') {
                     const gradeMatch = processedValue.match(/[ABCDEF]/i);
@@ -1281,7 +1299,13 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           for (const [key, value] of Object.entries(aiData)) {
             if (value !== undefined && value !== null) {
               // Handle empty strings by replacing with nothing (not even a space)
-              const displayValue = value === '' ? '' : String(value);
+              let displayValue = value === '' ? '' : String(value);
+
+              // Clean up any invisible characters or whitespace
+              if (displayValue === '' || displayValue.trim() === '') {
+                displayValue = '';
+              }
+
               result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), displayValue);
             }
           }
@@ -1513,18 +1537,27 @@ Respond with a JSON object containing these exact keys: ${variablesToGenerate.ma
           if (stepId >= 1 && stepId <= steps.length) {
             currentStep = stepId;
 
-            // Always generate AI data when navigating to any step
-            // This ensures fresh data if user went back and changed input
-            try {
-              await generateAIData();
-              // Update the current step content with fresh AI data
+            // Check if the current step's view contains AI variables
+            const currentStepData = steps[stepId - 1];
+            const viewContent = parsedScript.views[currentStepData.viewName].content;
+
+            if (viewContainsAIVariables(viewContent)) {
+              // Only generate AI data if the view actually contains AI variables
+              try {
+                await generateAIData();
+                // Update the current step content with fresh AI data
+                updateStepContent(stepId);
+                // Refresh icons for any new elements
+                refreshIcons();
+              } catch (error) {
+                console.error('AI Generation failed:', error);
+                // Show error message to user but don't block navigation
+                notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
+              }
+            } else {
+              // No AI variables in this view, just update the content normally
               updateStepContent(stepId);
-              // Refresh icons for any new elements
               refreshIcons();
-            } catch (error) {
-              console.error('AI Generation failed:', error);
-              // Show error message to user but don't block navigation
-              notyf.error(`AI Generation Failed: ${error.message}. Please check your API key and try again.`);
             }
 
             // Always update UI to show/hide the correct step
