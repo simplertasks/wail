@@ -297,10 +297,9 @@
 
 <ai-generated>
 {
-  "ai-selected-city": "randomly select one city from {cities}",
-  "ai-evaluation": "The user was asked to provide 3 facts about {ai-selected-city} and wrote: '{city-facts}'. Evaluate these specific facts for accuracy. Give a grade based on how many facts are correct. Don't penalize for missing information that wasn't asked for.",
+  "ai-evaluation": "The user was asked to provide 3 facts about {selected-city} and wrote: '{city-facts}'. Evaluate these specific facts for accuracy. Give a grade based on how many facts are correct. Don't penalize for missing information that wasn't asked for.",
   "ai-grade": "assign only a single letter grade A, B, C, D, or F based on accuracy of the facts provided",
-  "ai-funfact": "generate one interesting fact specifically about {ai-selected-city}"
+  "ai-funfact": "generate one interesting fact specifically about {selected-city}"
 }
 </ai-generated>
 
@@ -327,9 +326,16 @@ Welcome to the Cities Quiz! Let's get started.
     <input type="text" name="user-name" placeholder="Your name" />
   </label>
 
-<label>What are three facts about {ai-selected-city}?
-<textarea name="city-facts" rows="4" placeholder="Enter three facts..."></textarea>
-</label>
+  <label>Select a city
+    <select name="selected-city">
+      <option value="">Choose a city...</option>
+      {cities-options}
+    </select>
+  </label>
+
+  <label>What are three facts about your selected city?
+    <textarea name="city-facts" rows="4" placeholder="Enter three facts..."></textarea>
+  </label>
 
 </form>
 </view>
@@ -337,7 +343,7 @@ Welcome to the Cities Quiz! Let's get started.
 <view name="output" type="submit">
 **Hello {user-name}!**
 
-You were asked about **{ai-selected-city}** and you replied:
+You were asked about **{selected-city}** and you replied:
 
 *{city-facts}*
 
@@ -738,7 +744,7 @@ _Coming soon:_ theme, export, and defaults.
             const tableData = records.map(record => {
               const createdDate = new Date(record.created).toLocaleDateString();
               const userName = record.data?.formData?.['user-name'] || 'N/A';
-              const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
+              const city = record.data?.formData?.['selected-city'] || 'N/A';
               const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
 
               return [
@@ -827,7 +833,7 @@ _Coming soon:_ theme, export, and defaults.
               </header>
               <div>
                 <p><strong>Date:</strong> ${new Date(record.created).toLocaleString()}</p>
-                <p><strong>City:</strong> ${record.data?.aiData?.['ai-selected-city'] || 'N/A'}</p>
+                <p><strong>City:</strong> ${record.data?.formData?.['selected-city'] || 'N/A'}</p>
                 <p><strong>Current Grade:</strong> ${record.data?.aiData?.['ai-grade'] || 'N/A'}</p>
                 
                 <h4>Your Facts About the City:</h4>
@@ -918,7 +924,7 @@ _Coming soon:_ theme, export, and defaults.
             const createdDate = new Date(record.created).toLocaleString();
             const updatedDate = new Date(record.updated).toLocaleString();
             const userName = record.data?.formData?.['user-name'] || 'N/A';
-            const city = record.data?.aiData?.['ai-selected-city'] || 'N/A';
+            const city = record.data?.formData?.['selected-city'] || 'N/A';
             const grade = record.data?.aiData?.['ai-grade'] || 'N/A';
 
             html += `
@@ -1300,20 +1306,8 @@ _Coming soon:_ theme, export, and defaults.
           return `${formDataStr}-${stepStr}`;
         }
 
-        // AI generation - handles both API and non-API generated variables
+        // AI generation - handles API generated variables
         async function generateAIData() {
-          // First, handle any non-API variables that can be generated immediately
-          const nonApiVariables = ['ai-selected-city']; // Add other non-API variables here
-
-          for (const varName of nonApiVariables) {
-            if (parsedScript.aiGenerated[varName] && !aiData[varName]) {
-              if (varName === 'ai-selected-city') {
-                generateCitySelection();
-              }
-              // Add other non-API variable generators here
-            }
-          }
-
           // Check if we need to generate any API-required variables
           const apiKey = formData['groq-api-key'];
           const variablesToGenerate = Object.keys(parsedScript.aiGenerated || {}).filter(key => !aiData[key]);
@@ -1380,16 +1374,6 @@ _Coming soon:_ theme, export, and defaults.
           });
         }
 
-        // Generate city selection first (no API key needed for random selection)
-        function generateCitySelection() {
-          const cities = parsedScript.data.cities;
-          if (!cities || cities.length === 0) return;
-
-          // Simple random selection
-          const randomIndex = Math.floor(Math.random() * cities.length);
-          aiData['ai-selected-city'] = cities[randomIndex];
-          console.log('Selected city:', aiData['ai-selected-city']);
-        }
 
         // Groq API implementation
         async function generateWithGroqAPI(apiKey) {
@@ -1399,13 +1383,6 @@ _Coming soon:_ theme, export, and defaults.
 
           if (variablesToGenerate.length === 0) {
             return;
-          }
-
-          // First, generate any missing AI data that other instructions depend on
-          // This is a simplified approach - generate city selection first if needed
-          if (variablesToGenerate.includes('ai-selected-city') && !aiData['ai-selected-city']) {
-            // Generate city selection first
-            generateCitySelection();
           }
 
           // Build dynamic prompt based on AI-GENERATED section
@@ -1470,7 +1447,7 @@ _Coming soon:_ theme, export, and defaults.
             .join('\n');
 
           // Much simpler, direct prompt
-          const selectedCity = aiData['ai-selected-city'] || 'Not selected';
+          const selectedCity = formData['selected-city'] || 'Not selected';
           const userFacts = formData['city-facts'] || 'No facts provided';
 
           const evaluationPrompt = `You are evaluating a quiz response about cities.
@@ -1662,11 +1639,17 @@ Return a JSON object with these exact keys: "ai-evaluation", "ai-grade", "ai-fun
           for (const [key, value] of Object.entries(parsedScript.metadata))
             result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
 
-          // Data (arrays -> simple numbered text list)
+          // Data (arrays -> simple numbered text list or dropdown options)
           for (const [key, value] of Object.entries(parsedScript.data)) {
             if (Array.isArray(value)) {
               const listText = value.map((item, i) => `${i + 1}. ${item}`).join('\n');
               result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), listText);
+
+              // Special handling for cities dropdown
+              if (key === 'cities') {
+                const optionsText = value.map(item => `<option value="${item}">${item}</option>`).join('\n');
+                result = result.replace(new RegExp(`\\{${key}-options\\}`, 'g'), optionsText);
+              }
             } else {
               result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
             }
@@ -1958,7 +1941,8 @@ Return a JSON object with these exact keys: "ai-evaluation", "ai-grade", "ai-fun
                 console.log('Form data before AI generation:', formData);
 
                 // Check if user has provided the required input
-                const hasUserInput = formData['city-facts'] && formData['city-facts'].trim().length > 0;
+                const hasUserInput = formData['city-facts'] && formData['city-facts'].trim().length > 0 &&
+                  formData['selected-city'] && formData['selected-city'].trim().length > 0;
 
                 if (!hasUserInput) {
                   console.log('User has not provided input yet, skipping user-dependent AI generation');
