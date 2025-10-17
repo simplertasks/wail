@@ -1375,7 +1375,7 @@ _Coming soon:_ theme, export, and defaults.
         }
 
 
-        // Groq API implementation
+        // Groq API implementation - Simplified approach
         async function generateWithGroqAPI(apiKey) {
           // Get all AI variables that need to be generated
           const aiVariables = Object.keys(parsedScript.aiGenerated || {});
@@ -1385,99 +1385,31 @@ _Coming soon:_ theme, export, and defaults.
             return;
           }
 
-          // Build dynamic prompt based on AI-GENERATED section
-          const promptInstructions = variablesToGenerate.map(key => {
-            let instruction = parsedScript.aiGenerated[key];
+          // Build the complete context object to send to AI
+          const contextData = {
+            metadata: parsedScript.metadata || {},
+            formData: formData,
+            aiData: aiData,
+            data: parsedScript.data || {},
+            aiGeneratedInstructions: parsedScript.aiGenerated || {}
+          };
 
-            // Interpolate variables in the instruction itself
-            // Replace form data variables
-            for (const [formKey, formValue] of Object.entries(formData)) {
-              if (formValue && formValue.trim()) {
-                instruction = instruction.replace(new RegExp(`\\{${formKey}\\}`, 'g'), formValue);
-              }
-            }
+          // Create a simple, clear prompt
+          const prompt = `You are an AI assistant helping with a quiz application. 
 
-            // Replace AI data variables
-            for (const [aiKey, aiValue] of Object.entries(aiData)) {
-              if (aiValue && aiValue.trim()) {
-                instruction = instruction.replace(new RegExp(`\\{${aiKey}\\}`, 'g'), aiValue);
-              }
-            }
+Here is the complete context:
 
-            // Replace metadata variables
-            for (const [metaKey, metaValue] of Object.entries(parsedScript.metadata || {})) {
-              instruction = instruction.replace(new RegExp(`\\{${metaKey}\\}`, 'g'), metaValue);
-            }
+${JSON.stringify(contextData, null, 2)}
 
-            // Replace data variables
-            for (const [dataKey, dataValue] of Object.entries(parsedScript.data || {})) {
-              if (Array.isArray(dataValue)) {
-                const listText = dataValue.map((item, i) => `${i + 1}. ${item}`).join('\n');
-                instruction = instruction.replace(new RegExp(`\\{${dataKey}\\}`, 'g'), listText);
-              } else {
-                instruction = instruction.replace(new RegExp(`\\{${dataKey}\\}`, 'g'), dataValue);
-              }
-            }
+Based on this context, please generate the AI values for the following keys: ${variablesToGenerate.join(', ')}
 
-            console.log(`Interpolated instruction for ${key}:`, instruction);
-            return `- ${key}: ${instruction}`;
-          }).join('\n');
+Return a JSON object with these exact keys and their generated values. Each value should be a single string that fulfills the instruction for that key.`;
 
-          // Debug: Log the actual form data being sent
-          console.log('Form data being sent to AI:', formData);
-          console.log('AI data being sent to AI:', aiData);
+          console.log('=== SIMPLIFIED AI REQUEST ===');
+          console.log('Context being sent to AI:', contextData);
           console.log('Variables to generate:', variablesToGenerate);
-          console.log('Prompt instructions:', promptInstructions);
-
-          // Extract dependencies and build context
-          const dependencies = extractDependencies(parsedScript.aiGenerated);
-          const dependencyText = dependencies.length > 0
-            ? `Available variables: ${dependencies.join(', ')}`
-            : 'No variables available';
-
-          // Build context with actual form data values
-          const formDataContext = Object.entries(formData)
-            .filter(([key, value]) => value && value.trim())
-            .map(([key, value]) => `${key}: "${value}"`)
-            .join('\n');
-
-          const aiDataContext = Object.entries(aiData)
-            .filter(([key, value]) => value && value.trim())
-            .map(([key, value]) => `${key}: "${value}"`)
-            .join('\n');
-
-          // Much simpler, direct prompt
-          const selectedCity = formData['selected-city'] || 'Not selected';
-          const userFacts = formData['city-facts'] || 'No facts provided';
-
-          const evaluationPrompt = `You are evaluating a quiz response about cities.
-
-The user was asked to provide 3 facts about ${selectedCity} and wrote: "${userFacts}"
-
-Please evaluate these facts for accuracy and provide:
-
-1. ai-evaluation: A brief assessment of how accurate these facts are
-2. ai-grade: A single letter grade (A, B, C, D, or F) based on accuracy
-3. ai-funfact: One interesting fact about ${selectedCity}
-
-Return a JSON object with these exact keys: "ai-evaluation", "ai-grade", "ai-funfact". Each value should be a single string.`;
-
-          console.log('=== COMPREHENSIVE AI DEBUG LOG ===');
-          console.log('1. Form data being sent to AI:', formData);
-          console.log('2. AI data being sent to AI:', aiData);
-          console.log('3. Variables to generate:', variablesToGenerate);
-          console.log('4. Prompt instructions:', promptInstructions);
-          console.log('5. Form data context:', formDataContext);
-          console.log('6. AI data context:', aiDataContext);
-          console.log('7. Dependencies:', dependencies);
-          console.log('8. Dependency text:', dependencyText);
-          console.log('9. Final prompt being sent to AI:', evaluationPrompt);
-          console.log('10. Raw AI generated instructions:', parsedScript.aiGenerated);
-          console.log('10. Current aiData after city selection:', aiData);
-          console.log('11. Parsed script metadata:', parsedScript.metadata);
-          console.log('12. Parsed script data:', parsedScript.data);
-          console.log('13. Parsed script aiGenerated:', parsedScript.aiGenerated);
-          console.log('=== END DEBUG LOG ===');
+          console.log('Prompt:', prompt);
+          console.log('=== END SIMPLIFIED REQUEST ===');
 
           // Try different models in order of preference
           const models = ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama-3-8b-8192'];
@@ -1493,7 +1425,7 @@ Return a JSON object with these exact keys: "ai-evaluation", "ai-grade", "ai-fun
                   },
                   {
                     role: 'user',
-                    content: evaluationPrompt
+                    content: prompt
                   }
                 ],
                 temperature: 0.7,
