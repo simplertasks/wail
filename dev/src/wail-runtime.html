@@ -198,6 +198,20 @@
         </div>
       </div>
 
+      <!-- API Debug Section -->
+      <div class="container" id="api-debug-section">
+        <details>
+          <summary>
+            <i data-lucide="code"></i> API Request Data (Debug)
+          </summary>
+          <div id="api-debug-container">
+            <div id="api-debug-content">
+              <p><em>Complete the quiz to see what data is sent to the AI API...</em></p>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- Quiz Results Table Section -->
       <div class="container" id="quiz-results-section" style="margin-top: 2rem;">
         <details>
@@ -722,6 +736,72 @@ _Coming soon:_ theme, export, and defaults.
           }
         }
 
+        // Function to update API debug content
+        function updateAPIDebugContent() {
+          const debugContent = document.getElementById('api-debug-content');
+          if (!debugContent) return;
+
+          // Build the context data that would be sent to the API
+          const contextData = {
+            metadata: parsedScript?.metadata || {},
+            formData: formData,
+            aiData: aiData,
+            data: parsedScript?.data || {},
+            aiGeneratedInstructions: parsedScript?.aiGenerated || {}
+          };
+
+          // Get variables that would be generated
+          const aiVariables = Object.keys(parsedScript?.aiGenerated || {});
+          const variablesToGenerate = aiVariables.filter(key => !aiData[key]);
+          const allAIVariables = aiVariables; // Show all variables for context
+
+          const debugInfo = {
+            timestamp: new Date().toISOString(),
+            variablesToGenerate: variablesToGenerate,
+            contextData: contextData,
+            prompt: `You are an AI assistant helping with a quiz application. 
+
+Here is the complete context:
+
+${JSON.stringify(contextData, null, 2)}
+
+Based on this context, please generate the AI values for the following keys: ${variablesToGenerate.join(', ')}
+
+Return a JSON object with these exact keys and their generated values. Each value should be a single string that fulfills the instruction for that key.`
+          };
+
+          debugContent.innerHTML = `
+            <div class="grid">
+              <div>
+                <strong>Last Updated:</strong><br>
+                <small>${new Date().toLocaleString()}</small>
+              </div>
+              <div>
+                <strong>All AI Variables:</strong><br>
+                <small>${allAIVariables.join(', ')}</small>
+              </div>
+              <div>
+                <strong>Still Need Generation:</strong><br>
+                <small>${variablesToGenerate.length > 0 ? variablesToGenerate.join(', ') : 'None (all generated)'}</small>
+              </div>
+              <div>
+                <strong>Form Data Status:</strong><br>
+                <small>${Object.keys(formData).length} fields filled</small>
+              </div>
+            </div>
+            
+            <details>
+              <summary><strong>Complete Context Data</strong></summary>
+              <pre><code>${JSON.stringify(contextData, null, 2)}</code></pre>
+            </details>
+            
+            <details>
+              <summary><strong>Full Prompt Sent to AI</strong></summary>
+              <pre><code>${debugInfo.prompt}</code></pre>
+            </details>
+          `;
+        }
+
         // Function to initialize and populate the quiz results table
         async function initializeQuizResultsTable() {
           try {
@@ -1147,6 +1227,10 @@ _Coming soon:_ theme, export, and defaults.
               formData[t.name] = t.value;
               // Clear cache when form data changes
               aiDataCache = {};
+              // Update API debug content if it exists
+              if (document.getElementById('api-debug-content')) {
+                updateAPIDebugContent();
+              }
             }
           });
 
@@ -1237,10 +1321,24 @@ _Coming soon:_ theme, export, and defaults.
             // Initialize quiz results table
             initializeQuizResultsTable();
 
+            // Initialize API debug content
+            updateAPIDebugContent();
+
             // Add event listener for details element toggle to refresh icons
             const detailsElement = document.querySelector('#quiz-results-section details');
             if (detailsElement) {
               detailsElement.addEventListener('toggle', () => {
+                // Small delay to ensure the content is rendered before refreshing icons
+                setTimeout(() => {
+                  refreshIcons();
+                }, 10);
+              });
+            }
+
+            // Add event listener for API debug details element toggle to refresh icons
+            const apiDebugElement = document.querySelector('#api-debug-section details');
+            if (apiDebugElement) {
+              apiDebugElement.addEventListener('toggle', () => {
                 // Small delay to ensure the content is rendered before refreshing icons
                 setTimeout(() => {
                   refreshIcons();
@@ -1546,6 +1644,8 @@ Return a JSON object with these exact keys and their generated values. Each valu
 
 
               // Success! Break out of the model loop
+              // Update API debug content after successful AI generation
+              updateAPIDebugContent();
               return;
 
             } catch (error) {
@@ -1801,6 +1901,8 @@ Return a JSON object with these exact keys and their generated values. Each valu
               formData[t.name] = t.value;
               // Clear cache when form data changes to ensure fresh AI generation
               aiDataCache = {};
+              // Update API debug content
+              updateAPIDebugContent();
             }
           });
           document.addEventListener('change', (e) => {
@@ -1809,6 +1911,8 @@ Return a JSON object with these exact keys and their generated values. Each valu
               formData[t.name] = t.value;
               // Clear cache when form data changes to ensure fresh AI generation
               aiDataCache = {};
+              // Update API debug content
+              updateAPIDebugContent();
             }
           });
 
